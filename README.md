@@ -8,6 +8,8 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
 | [`scripts/setup-project-board.sh`](scripts/setup-project-board.sh) | Idempotent script that ensures a GitHub Project (v2) board has the standard fields. |
+| [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
+| [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`. Idempotent. |
 
 ## The contract
 
@@ -24,6 +26,31 @@ Any project that adopts these templates commits to a board with at least these f
 GitHub's native `Parent issue` and `Sub-issues progress` fields are also part of the workflow but exist on every project board by default — no setup needed.
 
 The script is **idempotent and non-destructive**. If a field already exists, it's left alone — including its options. Projects that prefer `P0/P1/P2` over `Urgent/High/Medium/Low` (etc.) keep their local taste; the contract is just that the field exists.
+
+## Copilot review auto-resolve (all repos)
+
+Every repo gets the **"Resolve Copilot review comments"** workflow
+([`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml)).
+When GitHub Copilot (`copilot-pull-request-reviewer[bot]`) reviews a PR, Claude runs
+in CI, applies the valid suggestions, pushes the fixes to the PR branch, and resolves
+the threads it addressed — so nobody has to hand-resolve Copilot's comments each session.
+
+- **Code repos:** required — the workflow belongs on every code repo.
+- **Docs repos:** recommended but optional. PRs there are optional (docs often land
+  straight on `main`), so a Copilot review isn't guaranteed — the workflow just stays
+  dormant until a PR actually gets one. Harmless, zero-cost safety net.
+- **One-time secret:** the workflow needs an `ANTHROPIC_API_KEY`. Set it once at the org
+  level so every repo inherits it (private repos included):
+
+  ```bash
+  gh secret set ANTHROPIC_API_KEY --org AnunnakiCosmoCrew --visibility all
+  ```
+
+Install it into a repo (idempotent — re-run to roll template updates forward):
+
+```bash
+./scripts/install-copilot-workflow.sh /path/to/repo
+```
 
 ## Bootstrap a new project
 
@@ -43,9 +70,12 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    you don't need, and fill in the <!-- FILL --> sections with your stack's
 #    actual commands.
 
-# 5. Commit and push.
-git add CLAUDE.md
-git commit -m "chore: add CLAUDE.md (from project-templates)"
+# 5. Add the Copilot review auto-resolve workflow
+./scripts/install-copilot-workflow.sh .
+
+# 6. Commit and push.
+git add CLAUDE.md .github/workflows/resolve-copilot-comments.yml
+git commit -m "chore: add CLAUDE.md + Copilot-resolve workflow (from project-templates)"
 git push
 ```
 
@@ -66,4 +96,5 @@ When the conventions evolve (new field, new workflow step, etc.):
 
 ## Version history
 
+- **2026-07-01** — Added the standard **"Resolve Copilot review comments"** GitHub Actions workflow (`workflows/resolve-copilot-comments.yml`) + `install-copilot-workflow.sh`, and rolled it out to all org repos via PRs. Needs a one-time org-level `ANTHROPIC_API_KEY` secret.
 - **2026-05-12** — Initial templates. CLAUDE.md skeleton extracted from WordPower-app/CLAUDE.md after WP-565 (added `Dependent` field workflow, closed WP-29 staleness). `setup-project-board.sh` ensures Status, Priority, Estimate, Model & Effort, Dependent fields exist.
