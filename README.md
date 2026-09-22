@@ -83,9 +83,9 @@ git push
 
 When the conventions evolve (new field, new workflow step, etc.):
 
-1. Update `CLAUDE.template.md` and / or `scripts/setup-project-board.sh` here.
+1. Update the relevant source here: `CLAUDE.template.md`, `workflows/resolve-copilot-comments.yml`, or `scripts/`.
 2. Note the change in this README under "Version history" below.
-3. Open a PR in each adopting project to roll the change forward — the templates are not auto-applied to existing projects.
+3. Open a PR in each adopting project to roll the change forward — nothing here is auto-applied to existing projects. For the Copilot workflow specifically, that means re-running `./scripts/install-copilot-workflow.sh <repo-dir>` in each adopting repo and opening a PR with the result.
 
 ## Adopting projects
 
@@ -96,5 +96,6 @@ When the conventions evolve (new field, new workflow step, etc.):
 
 ## Version history
 
+- **2026-09-22** — Hardened `workflows/resolve-copilot-comments.yml`: SHA-pinned `anthropics/claude-code-action` (was a floating `@v1` tag), added a per-PR `concurrency` guard, restored the fork-PR safety check the header comment already claimed (`head.repo.full_name == github.repository`), bumped `actions/checkout` to v7, and added explicit `persist-credentials`/`GH_TOKEN`. Picked by auditing the 6 variants the file had already drifted into across 38 adopting repos and choosing the most complete, most recently maintained one (Pelerin's). Re-syncing already-adopting repos is a separate follow-up.
 - **2026-07-01** — Added the standard **"Resolve Copilot review comments"** GitHub Actions workflow (`workflows/resolve-copilot-comments.yml`) + `install-copilot-workflow.sh`, and rolled it out to all org repos via PRs. Needs a one-time org-level `ANTHROPIC_API_KEY` secret.
 - **2026-05-12** — Initial templates. CLAUDE.md skeleton extracted from WordPower-app/CLAUDE.md after WP-565 (added `Dependent` field workflow, closed WP-29 staleness). `setup-project-board.sh` ensures Status, Priority, Estimate, Model & Effort, Dependent fields exist.
