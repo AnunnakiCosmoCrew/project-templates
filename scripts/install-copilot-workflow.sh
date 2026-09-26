@@ -62,7 +62,7 @@ pr_workflows() {
   for f in "$dest_dir"/*.yml "$dest_dir"/*.yaml; do
     [ -f "$f" ] || continue
     [ "$(basename "$f")" = "resolve-copilot-comments.yml" ] && continue
-    if grep -v -E '^[[:space:]]*#' "$f" | grep -q -E '(^|[^_[:alnum:]])pull_request([^_[:alnum:]]|$)'; then
+    if awk '!/^[[:space:]]*#/ && /(^|[^_[:alnum:]])pull_request([^_[:alnum:]]|$)/ { found=1 } END { exit !found }' "$f"; then
       workflow_name "$f"
     fi
   done
