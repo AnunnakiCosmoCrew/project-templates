@@ -168,7 +168,7 @@ jobs:
                 [.data.repository.pullRequest.reviewThreads.nodes[]
                     | select(.isResolved == false
                       and (.comments.nodes | length) == 1
-                      and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer"))
+                      and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer[bot]"))
                  ] | length > 0
               ')
               if [ "$page_pending" = "true" ]; then
