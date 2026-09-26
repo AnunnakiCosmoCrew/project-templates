@@ -10,16 +10,50 @@ name: Resolve Copilot review comments
 # Copilot review. It's a harmless, zero-cost safety net on docs repos, not a
 # requirement.
 #
-# Requires an ANTHROPIC_API_KEY secret — set it ONCE at the org level so every
-# repo inherits it:
-#   gh secret set ANTHROPIC_API_KEY --org AnunnakiCosmoCrew --visibility all
+# Only touches same-repo PRs (fork PRs can't be pushed back to, and are
+# excluded by the headRepository check below).
+#
+# INSTALL: don't copy this file by hand. project-templates'
+# `scripts/install-copilot-workflow.sh <repo-dir> ["<PR check workflow name>"]`
+# fills in the `workflow_run.workflows` entry below with the `name:` of the
+# repo's own PR check workflow ("PR Quality & Security Checks" in Pelerin,
+# "Build" in Pelerin-web, ...), which differs per repo.
+#
+# SECRET: the Claude step needs ANTHROPIC_API_KEY as a *repository* secret:
+#   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
+# On the org's GitHub Free plan an *organization* secret does not reach a
+# private repository, so setting it at the org level does nothing there. It is
+# optional: until it is set, `find-prs` warns once and outputs no PRs, so the
+# Claude job is skipped instead of failing on the missing key. A PUBLIC repo
+# does see an org secret whose visibility is `all`, so there the workflow is
+# live as soon as it's installed. Either way the key bills the Anthropic API
+# account, not the Claude subscription.
+#
+# Trigger note: this used to run on `pull_request_review`. GitHub gates runs
+# triggered directly by Copilot's own review bot (`copilot-pull-request-
+# reviewer[bot]`) as `action_required` with zero jobs — it treats that bot
+# actor like an untrusted first-time contributor even on a same-repo,
+# non-fork, private PR, and the job body never executes. There's no approval
+# control that fixes this (confirmed 2026-09-24; same failure mode at
+# https://github.com/sparq-org/sparq/issues/6311).
+#
+# It then polled on a 15-minute cron. That billed a full minute per poll for a
+# 4-second scan — ~96 minutes a day, ~2,900 a month, more than the org's whole
+# free allowance — whether or not any PR existed. Do not bring it back. Now it
+# runs on `workflow_run` of the PR check workflow instead: a Copilot review is
+# normally in by the time that finishes, and a push the resolve job itself
+# makes re-triggers it, which re-checks. The cron stays only as a sparse
+# fallback for a review that lands late. In both cases `find-prs` scans every
+# open PR for a Copilot review thread that's unresolved and has exactly one
+# comment (Copilot's, with no reply yet — a cheap idempotency signal), and only
+# spins up the expensive Claude step for PRs that actually need it.
 #
 # TRUST BOUNDARY — read before changing this file.
-# This job runs with `contents: write`, a write-capable GH_TOKEN, and the org
+# The Claude job runs with `contents: write`, a write-capable GH_TOKEN, and the
 # ANTHROPIC_API_KEY, on a branch whose content comes from the PR author. The
-# fork-PR check below keeps out anonymous contributors, but it does NOT make a
-# same-repo branch trusted: anyone with push access can open a PR. So the job
-# must never execute code that comes from the PR. Two rules enforce that:
+# same-repo check keeps out fork PRs, but it does NOT make a same-repo branch
+# trusted: anyone with push access can open a PR. So the job must never execute
+# code that comes from the PR. Two rules enforce that:
 #   1. The prompt does NOT ask Claude to run the project's build/tests/lint.
 #      Those run in the repo's own CI on the commit this job pushes, which is
 #      the correct place for them — CI is what gates the merge anyway.
@@ -30,48 +64,227 @@ name: Resolve Copilot review comments
 # `permissions: {}`, and keep this privileged job free of PR-authored code.
 
 on:
-  pull_request_review:
-    types: [submitted]
-
-# Serialize runs per PR so overlapping Copilot reviews (or re-runs) can't race
-# on commits/pushes to the same branch.
-concurrency:
-  group: resolve-copilot-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  workflow_run:
+    workflows: ["{{PR_CHECK_WORKFLOW}}"]
+    types: [completed]
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Force-process this PR number, skipping the scan (for manual re-runs / debugging)'
+        required: false
+        type: string
 
 jobs:
+  find-prs:
+    # A `workflow_run` fired by a push to main has no PR to look at; skip it
+    # rather than pay a minute to scan and find nothing.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.scan.outputs.prs }}
+    steps:
+      - name: Find open PRs with an unresolved, unreplied Copilot thread
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          FORCE_PR: ${{ inputs.pr }}
+          # Presence only — the value itself never enters the script.
+          API_KEY_PRESENT: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$API_KEY_PRESENT" != "true" ]; then
+            echo "::warning::ANTHROPIC_API_KEY is not visible to this repository (an organization secret does not reach a private repo on the Free plan). Set it as a repository secret to enable the Claude step; skipping the scan."
+            echo "prs=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Untrusted input from a workflow_dispatch string field — must be a
+          # plain positive integer before it's allowed anywhere near matrix.pr
+          # (which later gets interpolated into a run: script; anything else
+          # there is a script-injection risk).
+          if [ -n "$FORCE_PR" ]; then
+            case "$FORCE_PR" in
+              ''|*[!0-9]*)
+                echo "::error::pr input must be a positive integer, got: $FORCE_PR"
+                exit 1
+                ;;
+            esac
+            # Same-repo + open check: the scheduled path only ever sees
+            # same-repo open PRs from gh pr list; this manual override must
+            # be held to the same standard before it reaches a privileged job.
+            pr_info=$(gh pr view "$FORCE_PR" --repo "$REPO" --json state,headRepository) || {
+              echo "::error::could not look up PR #$FORCE_PR in $REPO"
+              exit 1
+            }
+            pr_state=$(echo "$pr_info" | jq -r '.state')
+            pr_same_repo=$(echo "$pr_info" | jq -r --arg repo "$REPO" '.headRepository.nameWithOwner == $repo')
+            if [ "$pr_state" != "OPEN" ] || [ "$pr_same_repo" != "true" ]; then
+              echo "::error::PR #$FORCE_PR is not an open, same-repo PR (state=$pr_state, same_repo=$pr_same_repo)"
+              exit 1
+            fi
+            echo "prs=[$FORCE_PR]" >> "$GITHUB_OUTPUT"
+            echo "Forced to PR #$FORCE_PR (scan skipped, validated open + same-repo)"
+            exit 0
+          fi
+
+          repo_name="${REPO#*/}"
+          full_repo="$REPO"
+          numbers=$(gh pr list --repo "$REPO" --state open --limit 1000 --json number --jq '.[].number')
+          matches="[]"
+          for n in $numbers; do
+            cursor=""
+            pending="false"
+            while true; do
+              args=(-f owner="$OWNER" -f repo="$repo_name" -F num="$n")
+              [ -n "$cursor" ] && args+=(-f after="$cursor")
+              # shellcheck disable=SC2016  # GraphQL's own $owner/$repo/$num/$after vars must stay single-quoted, not bash-expanded
+              resp=$(gh api graphql -f query='
+                query($owner:String!,$repo:String!,$num:Int!,$after:String) {
+                  repository(owner:$owner,name:$repo) {
+                    pullRequest(number:$num) {
+                      headRepository { nameWithOwner }
+                      reviewThreads(first:100, after:$after) {
+                        pageInfo { hasNextPage endCursor }
+                        nodes { isResolved comments(first:2) { nodes { author { login } } } }
+                      }
+                    }
+                  }
+                }' "${args[@]}")
+
+              same_repo=$(echo "$resp" | jq -r --arg repo "$full_repo" '.data.repository.pullRequest.headRepository.nameWithOwner == $repo')
+              if [ "$same_repo" != "true" ]; then
+                break
+              fi
+
+              page_pending=$(echo "$resp" | jq '
+                [.data.repository.pullRequest.reviewThreads.nodes[]
+                    | select(.isResolved == false
+                      and (.comments.nodes | length) == 1
+                      and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer[bot]"))
+                 ] | length > 0
+              ')
+              if [ "$page_pending" = "true" ]; then
+                pending="true"
+                break
+              fi
+
+              has_next=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+              [ "$has_next" = "true" ] || break
+              cursor=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+            done
+            if [ "$pending" = "true" ]; then
+              matches=$(echo "$matches" | jq -c --argjson n "$n" '. + [$n]')
+            fi
+          done
+          echo "prs=$matches" >> "$GITHUB_OUTPUT"
+          echo "Found PRs needing a Copilot-comment pass: $matches"
+
   resolve-copilot:
-    # Copilot's review only, AND only for same-repo PRs — fork PRs can't be
-    # pushed back to and must never run this with write permissions/secrets.
-    # See the TRUST BOUNDARY note above: this is a necessary check, not a
-    # sufficient one.
-    if: >-
-      github.event.review.user.login == 'copilot-pull-request-reviewer[bot]' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    needs: find-prs
+    if: needs.find-prs.outputs.prs != '[]'
+    strategy:
+      matrix:
+        pr: ${{ fromJson(needs.find-prs.outputs.prs) }}
+      fail-fast: false
+    # Serialize runs per PR so overlapping polls (or re-runs) can't race on
+    # commits/pushes to the same branch.
+    concurrency:
+      group: resolve-copilot-${{ matrix.pr }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write        # push fixes to the PR branch
       pull-requests: write    # reply to / resolve review threads
+      id-token: write         # claude-code-action's OIDC token exchange
     steps:
+      - name: Look up PR head ref
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          ref=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefName --jq .headRefName)
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      # The scan that queued this matrix entry can be up to the poll interval
+      # stale, and a run queued behind this PR's concurrency group may have
+      # been made redundant by an earlier run in that same group. Recheck
+      # before paying for a checkout + Claude invocation.
+      - name: Recheck the thread is still pending
+        id: recheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          PR_NUMBER: ${{ matrix.pr }}
+        run: |
+          set -euo pipefail
+          repo_name="${REPO#*/}"
+          cursor=""
+          pending="false"
+          while true; do
+            args=(-f owner="$OWNER" -f repo="$repo_name" -F num="$PR_NUMBER")
+            [ -n "$cursor" ] && args+=(-f after="$cursor")
+            # shellcheck disable=SC2016  # GraphQL's own $owner/$repo/$num/$after vars must stay single-quoted, not bash-expanded
+            resp=$(gh api graphql -f query='
+              query($owner:String!,$repo:String!,$num:Int!,$after:String) {
+                repository(owner:$owner,name:$repo) {
+                  pullRequest(number:$num) {
+                    reviewThreads(first:100, after:$after) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes { isResolved comments(first:2) { nodes { author { login } } } }
+                    }
+                  }
+                }
+              }' "${args[@]}")
+            page_pending=$(echo "$resp" | jq '
+              [.data.repository.pullRequest.reviewThreads.nodes[]
+                  | select(.isResolved == false
+                    and (.comments.nodes | length) == 1
+                    and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer"))
+               ] | length > 0
+            ')
+            if [ "$page_pending" = "true" ]; then
+              pending="true"
+              break
+            fi
+            has_next=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+            [ "$has_next" = "true" ] || break
+            cursor=$(echo "$resp" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+          done
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+
       - name: Checkout PR branch
+        if: steps.recheck.outputs.pending == 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ steps.pr.outputs.ref }}
           fetch-depth: 0
           persist-credentials: true   # keep the token so fixes can be pushed back
 
       - name: Resolve Copilot comments
-        uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590  # v1
+        if: steps.recheck.outputs.pending == 'true'
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de  # v1
         env:
           GH_TOKEN: ${{ github.token }}   # gh api / GraphQL auth for the agent
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ matrix.pr }}
 
-            GitHub Copilot (login `copilot-pull-request-reviewer[bot]`) just left a
-            code review on this PR. Address its review comments:
+            GitHub Copilot (login `copilot-pull-request-reviewer[bot]`) left a
+            code review on this PR that hasn't been addressed yet. Address its
+            review comments:
 
             1. Fetch Copilot's inline comments and review summaries via `gh api`
                (repos/.../pulls/NUMBER/comments and .../reviews), keeping only
@@ -82,7 +295,7 @@ jobs:
             3. Commit and push the fixes to this PR branch. Do NOT run the
                project's build, tests, or lint here, and do not run any script
                that comes from this PR — this job holds a write-capable token and
-               the org API key. The repo's own CI runs on the commit you push and
+               the API key. The repo's own CI runs on the commit you push and
                is what gates the merge; if it fails there, that's the signal.
             4. Reply to each thread you addressed and resolve it using the GraphQL
                `resolveReviewThread` mutation. Never resolve a thread you didn't fix.
