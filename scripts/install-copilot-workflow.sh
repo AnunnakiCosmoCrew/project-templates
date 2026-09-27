@@ -143,7 +143,7 @@ else
 fi
 
 if [ "$no_ci" = true ]; then
-  extra_trigger='  pull_request:
+  extra_trigger='  pull_request_target:
     types: [opened, synchronize]'
 else
   extra_trigger=''
