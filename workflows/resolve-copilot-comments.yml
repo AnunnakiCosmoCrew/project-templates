@@ -19,6 +19,17 @@ name: Resolve Copilot review comments
 # repo's own PR check workflow ("PR Quality & Security Checks" in Pelerin,
 # "Build" in Pelerin-web, ...), which differs per repo.
 #
+# NO-CI REPOS: some repos (e.g. static-site repos with no pull_request-
+# triggered CI at all) have no workflow name to hang `workflow_run` off of —
+# that trigger would just be permanently inert. For those, run the installer
+# with `--no-ci` instead of a workflow name: it fills in the extra-trigger
+# placeholder below with a direct `pull_request: types: [opened, synchronize]`
+# trigger so the
+# scan still runs promptly (instead of relying solely on the 3-hourly cron),
+# and leaves `workflow_run` in place but pointed at a sentinel name that never
+# matches anything (harmless — see TRUST BOUNDARY: `find-prs` re-scans for a
+# real pending Copilot thread before doing anything expensive either way).
+#
 # SECRET: the Claude step needs ANTHROPIC_API_KEY as a *repository* secret:
 #   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
 # On the org's GitHub Free plan an *organization* secret does not reach a
@@ -67,6 +78,7 @@ on:
   workflow_run:
     workflows: ["{{PR_CHECK_WORKFLOW}}"]
     types: [completed]
+  {{EXTRA_TRIGGER}}
   schedule:
     - cron: '0 */3 * * *'
   workflow_dispatch:
