@@ -24,11 +24,11 @@ name: Resolve Copilot review comments
 # that trigger would just be permanently inert. For those, run the installer
 # with `--no-ci` instead of a workflow name: it fills in the extra-trigger
 # placeholder below with a direct `pull_request: types: [opened, synchronize]`
-# trigger so the
-# scan still runs promptly (instead of relying solely on the 3-hourly cron),
-# and leaves `workflow_run` in place but pointed at a sentinel name that never
-# matches anything (harmless — see TRUST BOUNDARY: `find-prs` re-scans for a
-# real pending Copilot thread before doing anything expensive either way).
+# trigger, so the scan still runs promptly instead of relying solely on the
+# 3-hourly cron, and leaves `workflow_run` in place but pointed at a sentinel
+# name that never matches anything (harmless — see TRUST BOUNDARY: `find-prs`
+# re-scans for a real pending Copilot thread before doing anything expensive
+# either way).
 #
 # SECRET: the Claude step needs ANTHROPIC_API_KEY as a *repository* secret:
 #   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
