@@ -21,6 +21,7 @@ Placeholders (all required unless noted):
   {{PROJECT_BOARD_NUMBER}}    e.g., 11
   {{ISSUE_PREFIX}}            short code in caps, e.g., "WP", "MAG"
   {{BRANCH_PREFIX}}           lowercase prefix, e.g., "feature/wp", "feature/mag"
+  {{WORKTREE_PREFIX}}         sibling worktree dir prefix, e.g., "wp", "sf-be", "sf-fe"
   {{COMMIT_PREFIX_EXAMPLE}}   e.g., "WP-42", "MAG-7"
   {{TECH_STACK_DESCRIPTION}}  one-paragraph stack summary
 ============================================================================
@@ -64,6 +65,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Lint / format:  <FILL>
 # Single test:    <FILL>
 ```
+
+## Workflows
+
+Procedural how-tos live in skills that load on demand. Pick the flow that matches the work.
+
+| Flow              | When to use                                              | Skill                          |
+| ----------------- | -------------------------------------------------------- | ------------------------------ |
+| **Issue start**   | Beginning work on any tracked GitHub issue               | `issue-start` (this repo)      |
+| **Worktree mgmt** | Creating or cleaning up a worktree                       | `worktree` (global, all repos) |
+| **Open PR**       | After pushing a feature branch                           | `pr-open` (this repo)          |
+| **Direct edit**   | Trivial changes: typos, dep bumps, one-line config, docs | None — just commit (from a worktree) |
+
+`issue-start` and `pr-open` are scaffolded into `.claude/skills/` by
+`project-templates/scripts/install-workflow.sh`. The `worktree` skill is global
+(`~/.claude/skills/worktree/`), shared by every project.
 
 ## Git Workflow (Trunk-Based Development)
 
@@ -152,30 +168,9 @@ Every PR is auto-reviewed by GitHub Copilot (enabled at the org/repo level). Tre
 
 Multiple Claude Code agents may work on this repo concurrently. To prevent filesystem conflicts, every agent **must** develop inside a dedicated `git worktree` — never directly in the main working directory.
 
-### Creating a worktree
-
-```bash
-# From the main working directory
-git fetch origin
-git worktree add "../{{BRANCH_PREFIX}#feature/}-{N}-{slug}" -b {{BRANCH_PREFIX}}-{N}-{slug} origin/main
-```
-
-This creates a sibling directory checked out to the new branch. All build, test, and commit commands run from inside that directory.
-
-### Cleaning up
-
-```bash
-# After the PR is merged
-git worktree remove "../{{BRANCH_PREFIX}#feature/}-{N}-{slug}"
-git worktree prune
-git branch -D {{BRANCH_PREFIX}}-{N}-{slug}  # -D because squash-merge leaves the branch locally unmerged
-```
-
-### Rules
-
-- **Never develop in the main working directory.** If you find yourself editing files in the root clone, stop and create a worktree first.
-- One worktree per feature branch; one feature branch per issue.
-- The worktree path should match the branch slug for clarity.
+- **Create / clean up**: use the global `worktree` skill. Branch `{{BRANCH_PREFIX}}-<N>-<slug>`, sibling worktree path `../{{WORKTREE_PREFIX}}-<N>-<slug>`.
+- **Auto-cleanup**: `~/.claude/scripts/prune-worktrees.sh` runs on every `SessionStart` (wired globally via `prune-current-worktrees.sh`) and removes any worktree whose branch is gone from `origin` and whose tree is clean. Merged features are swept automatically — manual cleanup is rarely needed.
+- **Rules**: one worktree per feature branch; one feature branch per issue; never `.claude/worktrees/` or `.worktrees/`; if you're editing in the root clone, stop and create a worktree first.
 
 ## Project Management
 
