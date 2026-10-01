@@ -19,7 +19,9 @@ cp "$src/scripts/prune-current-worktrees.sh"  "$claude/scripts/prune-current-wor
 chmod +x "$claude/scripts/prune-worktrees.sh" "$claude/scripts/prune-current-worktrees.sh"
 echo "Installed: ~/.claude/skills/worktree + ~/.claude/scripts/prune-*.sh"
 
-if grep -q "prune-current-worktrees.sh" "$settings" 2>/dev/null; then
+if command -v jq >/dev/null 2>&1 && [ -f "$settings" ] &&
+   jq -e 'any(.hooks.SessionStart[]?.hooks[]?; .command == "$HOME/.claude/scripts/prune-current-worktrees.sh")' \
+     "$settings" >/dev/null 2>&1; then
   echo "SessionStart auto-prune hook already wired — leaving as-is."
   exit 0
 fi
