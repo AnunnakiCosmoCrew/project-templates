@@ -43,15 +43,19 @@ tpl_dir="$script_dir/../skill-templates"
 dest="$repo/.claude/skills"
 mkdir -p "$dest/issue-start" "$dest/pr-open"
 
+escape_sed_replacement() {
+  printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
+}
+
 subst() {
   sed -e '/<!-- TEMPLATE NOTE/,/-->/d' \
-      -e "s|{{PROJECT_NAME}}|$name|g" \
-      -e "s|{{ISSUE_PREFIX}}|$prefix|g" \
-      -e "s|{{BRANCH_PREFIX}}|$branch_prefix|g" \
-      -e "s|{{WORKTREE_PREFIX}}|$worktree_prefix|g" \
-      -e "s|{{PROJECT_BOARD_NUMBER}}|$board|g" \
-      -e "s|{{APP_REPO}}|$app_repo|g" \
-      -e "s|{{REPO_OWNER}}|$owner|g"
+      -e "s|{{PROJECT_NAME}}|$(escape_sed_replacement "$name")|g" \
+      -e "s|{{ISSUE_PREFIX}}|$(escape_sed_replacement "$prefix")|g" \
+      -e "s|{{BRANCH_PREFIX}}|$(escape_sed_replacement "$branch_prefix")|g" \
+      -e "s|{{WORKTREE_PREFIX}}|$(escape_sed_replacement "$worktree_prefix")|g" \
+      -e "s|{{PROJECT_BOARD_NUMBER}}|$(escape_sed_replacement "$board")|g" \
+      -e "s|{{APP_REPO}}|$(escape_sed_replacement "$app_repo")|g" \
+      -e "s|{{REPO_OWNER}}|$(escape_sed_replacement "$owner")|g"
 }
 
 subst < "$tpl_dir/issue-start/SKILL.md" > "$dest/issue-start/SKILL.md"
