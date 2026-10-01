@@ -15,9 +15,6 @@ cd "$repo"
 
 git fetch --prune origin --quiet 2>/dev/null || true
 
-remote_branches=$(git ls-remote --heads origin 2>/dev/null \
-  | awk '{sub("refs/heads/","",$2); print $2}' | sort -u)
-
 git worktree list --porcelain | awk '
   /^worktree / { wt=$2 }
   /^branch / { sub("refs/heads/","",$2); print wt "\t" $2 }
@@ -28,7 +25,9 @@ git worktree list --porcelain | awk '
   # Leave agent-harness branches alone — they belong to (possibly other) live sessions
   case "$branch" in claude/*) continue ;; esac
 
-  if printf '%s\n' "$remote_branches" | grep -qx "$branch"; then
+  upstream="$(git for-each-ref --format='%(upstream:short)' "refs/heads/$branch")"
+  upstream_state="$(git for-each-ref --format='%(upstream:track)' "refs/heads/$branch")"
+  if [ "$upstream" != "origin/$branch" ] || [ "$upstream_state" != "[gone]" ]; then
     continue
   fi
 
