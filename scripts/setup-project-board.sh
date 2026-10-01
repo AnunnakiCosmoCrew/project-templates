@@ -99,10 +99,10 @@ create_single_select_field() {
   # Build the options literal for GraphQL. createProjectV2Field takes an
   # input list of {name, color, description}.
   local opts
-  opts=$(echo "$options_json" | jq -c '
+  opts=$(echo "$options_json" | jq -r '
     map("{name: \"" + .name + "\", color: " + .color + ", description: \"" + .description + "\"}")
     | join(", ")
-  ' | sed 's/^"//; s/"$//')
+  ')
 
   gh api graphql -f query="
     mutation {

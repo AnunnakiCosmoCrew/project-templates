@@ -7,6 +7,10 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | File | What it does |
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
+| [`skill-templates/`](skill-templates) | Parameterized `issue-start` + `pr-open` skills, scaffolded per repo by `install-workflow.sh`. |
+| [`global/`](global) | Canonical copies of the machine-global assets: the `worktree` skill and the `prune-*` scripts. |
+| [`scripts/install-workflow.sh`](scripts/install-workflow.sh) | Stamps the per-project workflow skills (`issue-start`, `pr-open`) into a repo, substituting placeholders. |
+| [`scripts/install-global-workflow.sh`](scripts/install-global-workflow.sh) | One-time-per-machine: installs the global `worktree` skill, the prune scripts, and the universal auto-prune `SessionStart` hook. |
 | [`scripts/setup-project-board.sh`](scripts/setup-project-board.sh) | Idempotent script that ensures a GitHub Project (v2) board has the standard fields. |
 | [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
@@ -26,6 +30,33 @@ Any project that adopts these templates commits to a board with at least these f
 GitHub's native `Parent issue` and `Sub-issues progress` fields are also part of the workflow but exist on every project board by default — no setup needed.
 
 The script is **idempotent and non-destructive**. If a field already exists, it's left alone — including its options. Projects that prefer `P0/P1/P2` over `Urgent/High/Medium/Low` (etc.) keep their local taste; the contract is just that the field exists.
+
+## Git workflow (worktrees + auto-cleanup)
+
+Every project uses the same trunk-based, worktree-isolated flow so multiple agents
+never collide on one working tree. It's split into a **global** layer (installed
+once per machine) and a **per-project** layer (scaffolded into each repo):
+
+| Layer | Asset | Where it lives | Applies to |
+| --- | --- | --- | --- |
+| Global | `worktree` skill | `~/.claude/skills/worktree/` | every project |
+| Global | auto-prune hook (`prune-current-worktrees.sh`) | `~/.claude/settings.json` `SessionStart` | every project |
+| Per-project | `issue-start`, `pr-open` skills | `<repo>/.claude/skills/` | that repo |
+| Per-project | Workflows + Agent Workflow sections | `<repo>/CLAUDE.md` | that repo |
+
+The **global** layer means a merged worktree is cleaned up automatically the next
+time you open *any* repo — no per-project wiring. The **per-project** skills carry
+the values that genuinely differ (board number, branch/commit prefix, required CI checks).
+
+### One-time global setup (per machine)
+
+```bash
+./scripts/install-global-workflow.sh
+```
+
+Installs the `worktree` skill + prune scripts into `~/.claude/` and wires the
+universal `SessionStart` auto-prune hook. Idempotent. The canonical sources live
+in [`global/`](global) — edit there and re-run to roll changes forward everywhere.
 
 ## Copilot review auto-resolve (all repos)
 
@@ -97,6 +128,9 @@ the repo's only `pull_request` workflow. If there are several, it lists them and
 ## Bootstrap a new project
 
 ```bash
+# 0. One-time per machine (if not done already): install the global worktree skill + auto-prune hook
+./scripts/install-global-workflow.sh
+
 # 1. Create the repo and project board (manually or via gh repo create + gh project create)
 gh repo create AnunnakiCosmoCrew/new-thing --public
 gh project create --owner AnunnakiCosmoCrew --title "New Thing"   # note the project number
@@ -112,14 +146,20 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    you don't need, and fill in the <!-- FILL --> sections with your stack's
 #    actual commands.
 
-# 5. Add the Copilot review auto-resolve workflow (from this repo's checkout), naming
+# 5. Scaffold the per-project workflow skills (issue-start, pr-open) into the repo:
+/path/to/project-templates/scripts/install-workflow.sh . \
+  --name "New Thing" --prefix NT --branch-prefix feature/nt \
+  --worktree-prefix nt --board <project-number> --app-repo new-thing
+#    Then fill the <!-- FILL --> required-checks list in .claude/skills/pr-open/SKILL.md.
+
+# 6. Add the Copilot review auto-resolve workflow (from this repo's checkout), naming
 #    the new repo's PR check workflow. It stays off, and costs no Actions minutes,
 #    until the repo sets COPILOT_RESOLVE_ENABLED=true and ANTHROPIC_API_KEY (see above).
-./scripts/install-copilot-workflow.sh /path/to/new-thing "<PR check workflow name>"
+/path/to/project-templates/scripts/install-copilot-workflow.sh . "<PR check workflow name>"
 
-# 6. Commit and push.
-git add CLAUDE.md .github/workflows/resolve-copilot-comments.yml
-git commit -m "chore: add CLAUDE.md + Copilot-resolve workflow (from project-templates)"
+# 7. Commit and push.
+git add CLAUDE.md .claude/skills .github/workflows/resolve-copilot-comments.yml
+git commit -m "chore: add CLAUDE.md, workflow skills + Copilot-resolve workflow (from project-templates)"
 git push
 ```
 
@@ -127,15 +167,20 @@ git push
 
 When the conventions evolve (new field, new workflow step, etc.):
 
-1. Update the relevant source here: `CLAUDE.template.md`, `workflows/resolve-copilot-comments.yml`, or `scripts/`.
+1. Update the relevant source here: `CLAUDE.template.md`, `skill-templates/`, `global/`, `workflows/resolve-copilot-comments.yml`, or `scripts/`.
 2. Note the change in this README under "Version history" below.
-3. Open a PR in each adopting project to roll the change forward — nothing here is auto-applied to existing projects. For the Copilot workflow specifically, that means re-running `./scripts/install-copilot-workflow.sh <repo-dir>` against each adopting repo (pass the PR check workflow name the first time) and opening a PR with the result.
+3. Roll it forward:
+   - **Global layer** (`global/`): re-run `./scripts/install-global-workflow.sh` — applies to every project at once.
+   - **Per-project layer** (`CLAUDE.template.md`, `skill-templates/`): open a PR in each adopting project. These are not auto-applied.
+   - **Copilot workflow**: re-run `./scripts/install-copilot-workflow.sh <repo-dir>` against each adopting repo (pass the PR check workflow name the first time) and open a PR with the result.
 
 ## Adopting projects
 
 | Project | CLAUDE.md | Board | Adopted |
 | --- | --- | --- | --- |
 | WordPower | [`WordPower-app/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/WordPower-app/blob/main/CLAUDE.md) | [#11](https://github.com/orgs/AnunnakiCosmoCrew/projects/11) | reference implementation |
+| SliceFocus (BE) | [`SliceFocus/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/SliceFocus/blob/main/CLAUDE.md) | [#8](https://github.com/orgs/AnunnakiCosmoCrew/projects/8) | 2026-06-27 (worktree workflow) |
+| SliceFocusFE | [`SliceFocusFE/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/SliceFocusFE/blob/main/CLAUDE.md) | [#8](https://github.com/orgs/AnunnakiCosmoCrew/projects/8) | 2026-06-27 (worktree workflow) |
 | Magpie | [`magpie-app-private/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/magpie-app-private/blob/main/CLAUDE.md) | [#12](https://github.com/orgs/AnunnakiCosmoCrew/projects/12) | 2026-05-12 |
 
 ## Version history
@@ -145,4 +190,6 @@ When the conventions evolve (new field, new workflow step, etc.):
 - **2026-09-22** — Closed the privileged-execution hole the first pass left open: the workflow no longer asks Claude to run the project's build/tests/lint (that was PR-authored code executing in a job that holds a write-capable token and the org `ANTHROPIC_API_KEY`), and `--allowedTools` now grants only `gh` and `git` instead of blanket `Bash`. Verification moves to the repo's own CI, which runs on the pushed commit and gates the merge anyway. Added a TRUST BOUNDARY comment to the workflow recording why the fork-PR check is necessary but not sufficient. Raised by Copilot review on #3.
 - **2026-09-22** — Hardened `workflows/resolve-copilot-comments.yml`: SHA-pinned `anthropics/claude-code-action` (was a floating `@v1` tag), added a per-PR `concurrency` guard, restored the fork-PR safety check the header comment already claimed (`head.repo.full_name == github.repository`), bumped `actions/checkout` to v7, and added explicit `persist-credentials`/`GH_TOKEN`. Picked by auditing the 6 variants the file had already drifted into across 38 adopting repos and choosing the most complete, most recently maintained one (Pelerin's). Re-syncing already-adopting repos is a separate follow-up.
 - **2026-07-01** — Added the standard **"Resolve Copilot review comments"** GitHub Actions workflow (`workflows/resolve-copilot-comments.yml`) + `install-copilot-workflow.sh`, and rolled it out to all org repos via PRs. Needs a one-time org-level `ANTHROPIC_API_KEY` secret.
+- **2026-10-01** — Landed the 2026-06-27 git-workflow templates (they had been sitting uncommitted in a working copy), together with the changes made to the installed copies since: `prune-current-worktrees.sh` no longer blocks session start (bounded stdin read, background delegate; 2026-07-02), the `worktree` skill's parent path is `~/Projects`, and `setup-project-board.sh` emits raw `jq` output for single-select options.
+- **2026-06-27** — Git workflow templatized. Added the global `worktree` skill + universal `SessionStart` auto-prune (`global/`, `install-global-workflow.sh`), parameterized `issue-start`/`pr-open` skill templates (`skill-templates/`, `install-workflow.sh`), and a Workflows routing table + slimmed Agent Workflow section in `CLAUDE.template.md`. SliceFocus (BE + FE) retrofitted to match WordPower; the per-repo `wp-worktree`/`sf-worktree` skills were replaced by the single global `worktree` skill.
 - **2026-05-12** — Initial templates. CLAUDE.md skeleton extracted from WordPower-app/CLAUDE.md after WP-565 (added `Dependent` field workflow, closed WP-29 staleness). `setup-project-board.sh` ensures Status, Priority, Estimate, Model & Effort, Dependent fields exist.
