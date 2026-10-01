@@ -32,7 +32,7 @@ cd "../<PATH>"
 Rules:
 
 - **Sibling path only** (`../<prefix>-<N>-<slug>`). Never `.claude/worktrees/` or `.worktrees/` — auto-prune can't reach those. (`claude/*` agent-harness worktrees are the harness's own and are exempt.)
-- The path prefix disambiguates repos that share the `~/IdeaProjects/` parent (e.g. `sf-be-` / `sf-fe-` / `wp-`), since issue numbers collide across separate repos.
+- The path prefix disambiguates repos that share the `~/Projects/` parent (e.g. `sf-be-` / `sf-fe-` / `wp-`), since issue numbers collide across separate repos.
 - One worktree per feature branch; one feature branch per issue.
 
 ## Clean up (after PR merges)
