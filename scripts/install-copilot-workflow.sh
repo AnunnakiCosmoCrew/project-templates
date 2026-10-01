@@ -22,13 +22,15 @@
 # synchronize]` trigger alongside the (inert) workflow_run and the cron
 # fallback, so the scan still runs promptly rather than only every 3 hours.
 #
-# Secret: the Claude step needs ANTHROPIC_API_KEY as a REPOSITORY secret:
+# The installed workflow is OFF until the repo opts in with a repository
+# variable — until then its triggers are skipped before a runner starts, so it
+# costs no Actions minutes:
+#   gh variable set COPILOT_RESOLVE_ENABLED --body true --repo <owner>/<repo>
+# The Claude step also needs ANTHROPIC_API_KEY as a REPOSITORY secret:
 #   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
 # On the org's GitHub Free plan an organization secret does not reach a private
-# repo. The key is optional: without it the workflow warns and skips the Claude
-# job instead of failing. A PUBLIC repo does see an org secret whose visibility
-# is `all`, so there the workflow is live as soon as it's installed. Either way
-# the key bills the Anthropic API account.
+# repo. With the variable on and the key missing the workflow warns and skips
+# the Claude job instead of failing. The key bills the Anthropic API account.
 set -euo pipefail
 
 placeholder='{{PR_CHECK_WORKFLOW}}'
@@ -176,5 +178,6 @@ if [ "$no_ci" = true ]; then
 else
   echo "Installed $dest (runs after \"$name\")"
 fi
-echo "Optional: enable the Claude step with a repository secret:"
+echo "The workflow is off (and free) until the repo opts in. To enable it:"
+echo "  gh variable set COPILOT_RESOLVE_ENABLED --body true --repo <owner>/<repo>"
 echo "  gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>"

@@ -54,21 +54,33 @@ only then starts the Claude job. **Don't reintroduce a 15-minute cron**: each po
 bills a full minute, about 2,900 minutes a month per repo, more than the org's whole
 GitHub Free allowance.
 
-**The API key is a repository secret, and optional.** On the org's GitHub Free plan an
-*organization* secret does not reach a *private* repo, so the key has to be set per repo:
+**The workflow is off until a repo opts in — and off means free.** `find-prs` is gated
+on a repository variable in its job-level `if:`, which GitHub evaluates before a runner
+is allocated. Until the variable is set, the `workflow_run` and cron triggers are skipped
+and bill no Actions minutes. To enable a repo, set the variable **and** the API key:
 
 ```bash
+gh variable set COPILOT_RESOLVE_ENABLED --body true --repo AnunnakiCosmoCrew/<repo>
 gh secret set ANTHROPIC_API_KEY --repo AnunnakiCosmoCrew/<repo>
 ```
 
-Without it, `find-prs` logs a warning and outputs no PRs, so the Claude job is skipped
-instead of failing. The key bills the Anthropic **API** account, not the Claude
-subscription. Decision 2026-09-25: leave it unset and the workflow dormant.
+The key has to be a *repository* secret: on the org's GitHub Free plan an *organization*
+secret does not reach a *private* repo. With the variable on and the key missing,
+`find-prs` logs a warning and outputs no PRs, so the Claude job is skipped instead of
+failing. The key bills the Anthropic **API** account, not the Claude subscription.
+Decision 2026-09-25: leave both unset and the workflow dormant.
 
-> **Don't set it at the org level.** An org secret with visibility `all` *does* reach a
-> public repo, so it would make the workflow live on every public repo that carries it.
-> The org had such an `ANTHROPIC_API_KEY` (set 2026-07-01); it was deleted on 2026-09-25,
-> and no repo has a repository-level one, so the workflow is dormant org-wide.
+Why a variable and not just the missing key: the key can only be checked inside a step
+(the `secrets` context is unavailable in a job-level `if:`), and a step only runs once a
+runner minute is already being billed. Before this gate, a dormant copy still started a
+runner on every PR check completion and every 3 hours, in every repo that carried it.
+Copies installed before 2026-10-01 do not have the gate; those were switched off with
+`gh workflow disable` instead. Re-run the installer to pick the gate up, then
+`gh workflow enable resolve-copilot-comments.yml --repo <owner>/<repo>`.
+
+> **Don't set the key at the org level.** An org secret with visibility `all` *does* reach a
+> public repo. The org had such an `ANTHROPIC_API_KEY` (set 2026-07-01); it was deleted on
+> 2026-09-25, and no repo has a repository-level one, so the workflow is dormant org-wide.
 
 **Install it into a repo** (idempotent — re-run to roll template updates forward). The
 second argument is the `name:` of that repo's PR check workflow, which differs per repo:
@@ -101,8 +113,8 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    actual commands.
 
 # 5. Add the Copilot review auto-resolve workflow (from this repo's checkout), naming
-#    the new repo's PR check workflow. It stays dormant until a repository
-#    ANTHROPIC_API_KEY is set (see above; public repos differ).
+#    the new repo's PR check workflow. It stays off, and costs no Actions minutes,
+#    until the repo sets COPILOT_RESOLVE_ENABLED=true and ANTHROPIC_API_KEY (see above).
 ./scripts/install-copilot-workflow.sh /path/to/new-thing "<PR check workflow name>"
 
 # 6. Commit and push.
@@ -128,6 +140,7 @@ When the conventions evolve (new field, new workflow step, etc.):
 
 ## Version history
 
+- **2026-10-01** — A dormant copy no longer bills Actions minutes. `find-prs` is gated on the repository variable `COPILOT_RESOLVE_ENABLED` in its job-level `if:`, which GitHub evaluates before a runner starts, so the `workflow_run` and cron triggers are skipped for a repo that has not opted in (`workflow_dispatch` bypasses the gate for manual debugging). Before this, every trigger started a runner only to find `ANTHROPIC_API_KEY` missing. Enabling a repo now takes the variable **and** the repository secret; the installer's closing hint and the section above say so. Rollout: the copies already in the org repos predate the gate and were switched off the same day with `gh workflow disable`; a repo picks the gate up when the installer is re-run there, followed by `gh workflow enable resolve-copilot-comments.yml`.
 - **2026-09-25** — Ported Pelerin's fix for the Copilot-resolve trigger ([AnunnakiCosmoCrew/Pelerin#129](https://github.com/AnunnakiCosmoCrew/Pelerin/pull/129), then [#148](https://github.com/AnunnakiCosmoCrew/Pelerin/pull/148)): `pull_request_review` never ran (GitHub gates the Copilot bot's runs as `action_required`), so the workflow now runs on `workflow_run` of the repo's PR check workflow, with a sparse `0 */3 * * *` cron fallback and `workflow_dispatch`. A `find-prs` job picks the PRs to process, and skips with a warning when `ANTHROPIC_API_KEY` isn't visible. The PR check workflow's name is a `{{PR_CHECK_WORKFLOW}}` placeholder that `install-copilot-workflow.sh` fills in per repo. The trust boundary from the previous entry is kept; Pelerin's copy doesn't have it. Corrected the docs: the key is an optional **repository** secret, because an org secret doesn't reach private repos on GitHub Free. It does reach public repos, so the org-level `ANTHROPIC_API_KEY` (visibility `all`) was deleted the same day, and this repo's own dogfooded copy is removed rather than kept in sync.
 - **2026-09-22** — Closed the privileged-execution hole the first pass left open: the workflow no longer asks Claude to run the project's build/tests/lint (that was PR-authored code executing in a job that holds a write-capable token and the org `ANTHROPIC_API_KEY`), and `--allowedTools` now grants only `gh` and `git` instead of blanket `Bash`. Verification moves to the repo's own CI, which runs on the pushed commit and gates the merge anyway. Added a TRUST BOUNDARY comment to the workflow recording why the fork-PR check is necessary but not sufficient. Raised by Copilot review on #3.
 - **2026-09-22** — Hardened `workflows/resolve-copilot-comments.yml`: SHA-pinned `anthropics/claude-code-action` (was a floating `@v1` tag), added a per-PR `concurrency` guard, restored the fork-PR safety check the header comment already claimed (`head.repo.full_name == github.repository`), bumped `actions/checkout` to v7, and added explicit `persist-credentials`/`GH_TOKEN`. Picked by auditing the 6 variants the file had already drifted into across 38 adopting repos and choosing the most complete, most recently maintained one (Pelerin's). Re-syncing already-adopting repos is a separate follow-up.

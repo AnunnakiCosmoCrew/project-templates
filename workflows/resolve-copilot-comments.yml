@@ -30,15 +30,28 @@ name: Resolve Copilot review comments
 # re-scans for a real pending Copilot thread before doing anything expensive
 # either way).
 #
-# SECRET: the Claude step needs ANTHROPIC_API_KEY as a *repository* secret:
+# ENABLE SWITCH: the workflow is OFF until the repository variable
+# COPILOT_RESOLVE_ENABLED is set to `true`:
+#   gh variable set COPILOT_RESOLVE_ENABLED --body true --repo <owner>/<repo>
+# `find-prs` checks it in its job-level `if:`, which GitHub evaluates before a
+# runner is allocated — so a repo that has not opted in pays nothing for the
+# `workflow_run` and cron triggers (the run shows as skipped). Without this
+# gate every trigger billed a runner minute just to discover there was no key:
+# hundreds of minutes a month per busy repo, in every repo carrying this file,
+# for a workflow that did nothing. Do not replace the variable with a check
+# inside a step — a step only runs once the minute is already being billed,
+# and the `secrets` context is not available in a job-level `if:`.
+# `workflow_dispatch` bypasses the switch so a manual run can still be used to
+# debug a repo before turning it on.
+#
+# SECRET: the Claude step also needs ANTHROPIC_API_KEY as a *repository* secret:
 #   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
 # On the org's GitHub Free plan an *organization* secret does not reach a
-# private repository, so setting it at the org level does nothing there. It is
-# optional: until it is set, `find-prs` warns once and outputs no PRs, so the
-# Claude job is skipped instead of failing on the missing key. A PUBLIC repo
-# does see an org secret whose visibility is `all`, so there the workflow is
-# live as soon as it's installed. Either way the key bills the Anthropic API
-# account, not the Claude subscription.
+# private repository, so setting it at the org level does nothing there. If the
+# variable is on but the key is missing, `find-prs` warns once and outputs no
+# PRs, so the Claude job is skipped instead of failing on the missing key. Set
+# both together when enabling a repo. The key bills the Anthropic API account,
+# not the Claude subscription.
 #
 # Trigger note: this used to run on `pull_request_review`. GitHub gates runs
 # triggered directly by Copilot's own review bot (`copilot-pull-request-
@@ -92,7 +105,11 @@ jobs:
   find-prs:
     # A `workflow_run` fired by a push to main has no PR to look at; skip it
     # rather than pay a minute to scan and find nothing.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+    # The COPILOT_RESOLVE_ENABLED gate comes first: see ENABLE SWITCH above.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.COPILOT_RESOLVE_ENABLED == 'true' &&
+       (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
