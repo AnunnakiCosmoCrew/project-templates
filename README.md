@@ -54,21 +54,33 @@ only then starts the Claude job. **Don't reintroduce a 15-minute cron**: each po
 bills a full minute, about 2,900 minutes a month per repo, more than the org's whole
 GitHub Free allowance.
 
-**The API key is a repository secret, and optional.** On the org's GitHub Free plan an
-*organization* secret does not reach a *private* repo, so the key has to be set per repo:
+**The workflow is off until a repo opts in — and off means free.** `find-prs` is gated
+on a repository variable in its job-level `if:`, which GitHub evaluates before a runner
+is allocated. Until the variable is set, the `workflow_run` and cron triggers are skipped
+and bill no Actions minutes. To enable a repo, set the variable **and** the API key:
 
 ```bash
+gh variable set COPILOT_RESOLVE_ENABLED --body true --repo AnunnakiCosmoCrew/<repo>
 gh secret set ANTHROPIC_API_KEY --repo AnunnakiCosmoCrew/<repo>
 ```
 
-Without it, `find-prs` logs a warning and outputs no PRs, so the Claude job is skipped
-instead of failing. The key bills the Anthropic **API** account, not the Claude
-subscription. Decision 2026-09-25: leave it unset and the workflow dormant.
+The key has to be a *repository* secret: on the org's GitHub Free plan an *organization*
+secret does not reach a *private* repo. With the variable on and the key missing,
+`find-prs` logs a warning and outputs no PRs, so the Claude job is skipped instead of
+failing. The key bills the Anthropic **API** account, not the Claude subscription.
+Decision 2026-09-25: leave both unset and the workflow dormant.
 
-> **Don't set it at the org level.** An org secret with visibility `all` *does* reach a
-> public repo, so it would make the workflow live on every public repo that carries it.
-> The org had such an `ANTHROPIC_API_KEY` (set 2026-07-01); it was deleted on 2026-09-25,
-> and no repo has a repository-level one, so the workflow is dormant org-wide.
+Why a variable and not just the missing key: the key can only be checked inside a step
+(the `secrets` context is unavailable in a job-level `if:`), and a step only runs once a
+runner minute is already being billed. Before this gate, a dormant copy still started a
+runner on every PR check completion and every 3 hours, in every repo that carried it.
+Copies installed before 2026-10-01 do not have the gate; those were switched off with
+`gh workflow disable` instead. Re-run the installer to pick the gate up, then
+`gh workflow enable resolve-copilot-comments.yml --repo <owner>/<repo>`.
+
+> **Don't set the key at the org level.** An org secret with visibility `all` *does* reach a
+> public repo. The org had such an `ANTHROPIC_API_KEY` (set 2026-07-01); it was deleted on
+> 2026-09-25, and no repo has a repository-level one, so the workflow is dormant org-wide.
 
 **Install it into a repo** (idempotent — re-run to roll template updates forward). The
 second argument is the `name:` of that repo's PR check workflow, which differs per repo:
@@ -101,8 +113,8 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    actual commands.
 
 # 5. Add the Copilot review auto-resolve workflow (from this repo's checkout), naming
-#    the new repo's PR check workflow. It stays dormant until a repository
-#    ANTHROPIC_API_KEY is set (see above; public repos differ).
+#    the new repo's PR check workflow. It stays off, and costs no Actions minutes,
+#    until the repo sets COPILOT_RESOLVE_ENABLED=true and ANTHROPIC_API_KEY (see above).
 ./scripts/install-copilot-workflow.sh /path/to/new-thing "<PR check workflow name>"
 
 # 6. Commit and push.
