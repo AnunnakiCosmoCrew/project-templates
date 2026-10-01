@@ -22,6 +22,8 @@ if [ -n "$payload" ]; then
 fi
 [ -z "${cwd:-}" ] && cwd="$(pwd -P)"
 [ -z "${cwd:-}" ] && exit 0
+repo="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$repo" ] && exit 0
 
-nohup "$HOME/.claude/scripts/prune-worktrees.sh" "$cwd" >/dev/null 2>&1 &
+nohup "$HOME/.claude/scripts/prune-worktrees.sh" "$repo" >/dev/null 2>&1 &
 exit 0
