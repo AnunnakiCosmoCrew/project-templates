@@ -107,7 +107,7 @@ Examples:
 
 1. **Add issue to the project board** when creating via `gh issue create` (it does NOT auto-add). Use `gh project item-add {{PROJECT_BOARD_NUMBER}} --owner {{REPO_OWNER}} --url <issue-url>`. Then set board fields: `Status`, `Priority`, `Estimate`, `Model & Effort`, and `Dependent` (if applicable — see "Dependent vs. sub-issues" below).
 2. **Set an estimate** (Fibonacci: 0, 1, 2, 3, 5, 8, 13) on the project board. Bugs are `0`.
-3. **Set the `Model & Effort`** on the project board; that represents the most optimal Claude.ai model and effort for the task (e.g., `Sonnet 4.6, medium`).
+3. **Set the `Model & Effort`** on the project board: format, model names and tiers per the global CLAUDE.md.
 4. **Set `Dependent`** if this issue is blocked by other issues — comma-separated list of issue numbers (e.g., `#412, #420`). Leave blank otherwise.
 5. **Move ticket to "In Progress"** on the project board before writing any code.
 6. **Create a feature branch** from latest `main`: `{{BRANCH_PREFIX}}-{N}-{slug}`.
