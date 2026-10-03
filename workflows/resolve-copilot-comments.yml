@@ -193,11 +193,12 @@ jobs:
                 break
               fi
 
+              # GraphQL reports the bot login without "[bot]"; only REST adds it.
               page_pending=$(echo "$resp" | jq '
                 [.data.repository.pullRequest.reviewThreads.nodes[]
                     | select(.isResolved == false
                       and (.comments.nodes | length) == 1
-                      and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer[bot]"))
+                      and (.comments.nodes[0].author.login == "copilot-pull-request-reviewer"))
                  ] | length > 0
               ')
               if [ "$page_pending" = "true" ]; then
