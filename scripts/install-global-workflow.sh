@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One-time-per-machine setup for the shared git workflow:
 #   - installs the global `worktree` skill into ~/.claude/skills/
+#   - installs the global `/resolve-copilot` command into ~/.claude/commands/
 #   - installs the prune scripts into ~/.claude/scripts/
 #   - wires the universal SessionStart auto-prune hook into ~/.claude/settings.json
 #
@@ -12,12 +13,13 @@ src="$(cd "$(dirname "$0")/../global" && pwd)"
 claude="$HOME/.claude"
 settings="$claude/settings.json"
 
-mkdir -p "$claude/skills/worktree" "$claude/scripts"
+mkdir -p "$claude/skills/worktree" "$claude/commands" "$claude/scripts"
 cp "$src/skills/worktree/SKILL.md"            "$claude/skills/worktree/SKILL.md"
+cp "$src/commands/resolve-copilot.md"         "$claude/commands/resolve-copilot.md"
 cp "$src/scripts/prune-worktrees.sh"          "$claude/scripts/prune-worktrees.sh"
 cp "$src/scripts/prune-current-worktrees.sh"  "$claude/scripts/prune-current-worktrees.sh"
 chmod +x "$claude/scripts/prune-worktrees.sh" "$claude/scripts/prune-current-worktrees.sh"
-echo "Installed: ~/.claude/skills/worktree + ~/.claude/scripts/prune-*.sh"
+echo "Installed: ~/.claude/skills/worktree + ~/.claude/commands/resolve-copilot.md + ~/.claude/scripts/prune-*.sh"
 
 if command -v jq >/dev/null 2>&1 && [ -f "$settings" ] &&
    jq -e 'any(.hooks.SessionStart[]?.hooks[]?; .command == "$HOME/.claude/scripts/prune-current-worktrees.sh")' \
