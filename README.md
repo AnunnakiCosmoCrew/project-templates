@@ -52,12 +52,14 @@ the values that genuinely differ (board number, branch/commit prefix, required C
 ### One-time global setup (per machine)
 
 ```bash
-./scripts/install-global-workflow.sh
+(cd ~/Projects/emirers && ./install.sh)   # worktree skill, prune scripts, SessionStart auto-prune hook, guards
+./scripts/install-global-workflow.sh      # the /resolve-copilot command
 ```
 
-Installs the `worktree` skill, the `/resolve-copilot` command and the prune scripts into `~/.claude/` and wires the
-universal `SessionStart` auto-prune hook. Idempotent. The canonical sources live
-in [`global/`](global) — edit there and re-run to roll changes forward everywhere.
+Both are idempotent. The fleet layer (worktree skill, prune scripts, hooks)
+lives in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003);
+edit it there and re-run its `install.sh`. The only global asset kept here is
+the `/resolve-copilot` command under [`global/commands/`](global/commands).
 
 ## Copilot review auto-resolve (all repos)
 

@@ -4,8 +4,10 @@
 #
 # The worktree skill is GLOBAL (~/.claude/skills/worktree) and is NOT copied per
 # repo — it's shared by every project. The auto-prune SessionStart hook is also
-# global. Run ./scripts/install-global-workflow.sh once per machine to install
-# those (see README "One-time global setup").
+# global. Both come from the private `emirers` repo: run
+# `cd ~/Projects/emirers && ./install.sh` once per machine (see README
+# "One-time global setup"). ./scripts/install-global-workflow.sh here installs
+# only the /resolve-copilot command.
 #
 # Usage:
 #   install-workflow.sh <repo-dir> \
@@ -66,6 +68,7 @@ echo
 echo "Next steps:"
 echo "  1. Fill the <!-- FILL --> required-status-checks list in pr-open/SKILL.md."
 echo "  2. Make sure the global worktree skill + prune hook are installed (one-time):"
-echo "       $script_dir/install-global-workflow.sh"
+echo "       cd ~/Projects/emirers && ./install.sh"
+echo "     and the /resolve-copilot command: $script_dir/install-global-workflow.sh"
 echo "  3. Add the 'Workflows' + 'Agent Workflow' sections to this repo's CLAUDE.md"
 echo "     (copy from project-templates/CLAUDE.template.md)."
