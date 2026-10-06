@@ -8,9 +8,9 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
 | [`skill-templates/`](skill-templates) | Parameterized `issue-start` + `pr-open` skills, scaffolded per repo by `install-workflow.sh`. |
-| [`global/`](global) | Canonical copies of the machine-global assets: the `worktree` skill, the `/resolve-copilot` command and the `prune-*` scripts. |
+| [`global/`](global) | Canonical copy of the one generic machine-global asset left here: the `/resolve-copilot` command. The `worktree` skill, the `prune-*` scripts, the hooks and the other fleet scripts live in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003) and are installed by its `install.sh`. |
 | [`scripts/install-workflow.sh`](scripts/install-workflow.sh) | Stamps the per-project workflow skills (`issue-start`, `pr-open`) into a repo, substituting placeholders. |
-| [`scripts/install-global-workflow.sh`](scripts/install-global-workflow.sh) | One-time-per-machine: installs the global `worktree` skill, the `/resolve-copilot` command, the prune scripts, and the universal auto-prune `SessionStart` hook. |
+| [`scripts/install-global-workflow.sh`](scripts/install-global-workflow.sh) | One-time-per-machine: installs the `/resolve-copilot` command. Everything else it used to install now comes from `emirers/install.sh`. |
 | [`scripts/setup-project-board.sh`](scripts/setup-project-board.sh) | Idempotent script that ensures a GitHub Project (v2) board has the standard fields. |
 | [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
@@ -52,12 +52,14 @@ the values that genuinely differ (board number, branch/commit prefix, required C
 ### One-time global setup (per machine)
 
 ```bash
-./scripts/install-global-workflow.sh
+(cd ~/Projects/emirers && ./install.sh)   # worktree skill, prune scripts, SessionStart auto-prune hook, guards
+./scripts/install-global-workflow.sh      # the /resolve-copilot command
 ```
 
-Installs the `worktree` skill, the `/resolve-copilot` command and the prune scripts into `~/.claude/` and wires the
-universal `SessionStart` auto-prune hook. Idempotent. The canonical sources live
-in [`global/`](global) — edit there and re-run to roll changes forward everywhere.
+Both are idempotent. The fleet layer (worktree skill, prune scripts, hooks)
+lives in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003);
+edit it there and re-run its `install.sh`. The only global asset kept here is
+the `/resolve-copilot` command under [`global/commands/`](global/commands).
 
 ## Copilot review auto-resolve (all repos)
 
@@ -135,8 +137,8 @@ the repo's only `pull_request` workflow. If there are several, it lists them and
 ## Bootstrap a new project
 
 ```bash
-# 0. One-time per machine (if not done already): install the global worktree skill + auto-prune hook
-./scripts/install-global-workflow.sh
+# 0. One-time per machine (if not done already): install the fleet layer (worktree skill, prune hook, guards)
+(cd ~/Projects/emirers && ./install.sh)   # private repo; then ./scripts/install-global-workflow.sh for /resolve-copilot
 
 # 1. Create the repo and project board (manually or via gh repo create + gh project create)
 gh repo create AnunnakiCosmoCrew/new-thing --public
@@ -177,7 +179,7 @@ When the conventions evolve (new field, new workflow step, etc.):
 1. Update the relevant source here: `CLAUDE.template.md`, `skill-templates/`, `global/`, `workflows/resolve-copilot-comments.yml`, or `scripts/`.
 2. Note the change in this README under "Version history" below.
 3. Roll it forward:
-   - **Global layer** (`global/`): re-run `./scripts/install-global-workflow.sh` — applies to every project at once.
+   - **Global layer**: the `/resolve-copilot` command is here (`global/commands/`): re-run `./scripts/install-global-workflow.sh`. The worktree skill, prune scripts and hooks are in `emirers`: change them there and run its `install.sh`.
    - **Per-project layer** (`CLAUDE.template.md`, `skill-templates/`): open a PR in each adopting project. These are not auto-applied.
    - **Copilot workflow**: re-run `./scripts/install-copilot-workflow.sh <repo-dir>` against each adopting repo (pass the PR check workflow name the first time) and open a PR with the result.
 
@@ -192,6 +194,7 @@ When the conventions evolve (new field, new workflow step, etc.):
 
 ## Version history
 
+- **2026-10-06** — The machine-global layer moved to the private `emirers` repo (luvita-docs ADR 0003): `global/scripts/prune-*.sh` and `global/skills/worktree` are removed from here because the installed copies had moved on (merged-PR proof, harness worktree grace) and re-running the installer would have downgraded them; `install-global-workflow.sh` now installs only `/resolve-copilot`. This repo is public, and the fleet scripts know the portfolio.
 - **2026-10-04** — Tightened the Copilot-resolve instructions after a review of 22 local `/resolve-copilot` runs. The command now lives here under `global/commands/` and is installed by `install-global-workflow.sh`. The workflow prompt gets the same steps. The runs handled Copilot's points well but improvised the rest. They used three different reply APIs, five of which errored (string IDs, `gh api --repo`, GraphQL built by interpolation). They piped `git push` through `tail`, which hides a rejected push. They held the reply and resolve behind long builds or CI until the user re-ran the command. They checked out PR branches in main clones. The command's "ignore outdated" rule would have skipped live threads. Both now carry: one paginated GraphQL thread query (outdated threads included, review-body findings checked); reply and resolve mutations that take variables, joined by `&&` so a failed reply never resolves; a fixed / declined / left-open rule for what to reply and resolve; and an unpiped push, verified against `@{u}`. The command also works in the branch's worktree, runs only the checks that cover the changed files, and never waits on CI. The workflow still works only threads with no reply yet, matching what its scan triggers on, so it never replies twice to a thread an earlier run left open. It now passes the owner and the bare repository name separately to GraphQL. It does not start for findings that sit only in a review body; those are left to a local `/resolve-copilot` pass. The workflow's trust boundary is unchanged: still no build or tests, still only `gh` and `git`.
 - **2026-10-03** — Fixed the `find-prs` scan never matching. It compared the first comment author of each review thread with `copilot-pull-request-reviewer[bot]`, but GraphQL returns that login **without** `[bot]` (the suffix only appears in the REST API and the UI; verified on AnunnakiCosmoCrew/divan PR #19), so once a repo opted in (`COPILOT_RESOLVE_ENABLED` + `ANTHROPIC_API_KEY`) no PR was ever picked up. The recheck stage already used the GraphQL form. Both jq filters now use `copilot-pull-request-reviewer`; the `[bot]` form stays only in the prompt text, which sends Claude to the REST API. Found by Copilot's own review of the divan copy. Copies that predate the fix are re-synced by re-running the installer, per repo.
 - **2026-10-01** — A dormant copy no longer bills Actions minutes. `find-prs` is gated on the repository variable `COPILOT_RESOLVE_ENABLED` in its job-level `if:`, which GitHub evaluates before a runner starts, so the `workflow_run` and cron triggers are skipped for a repo that has not opted in (`workflow_dispatch` bypasses the gate for manual debugging). Before this, every trigger started a runner only to find `ANTHROPIC_API_KEY` missing. Enabling a repo now takes the variable **and** the repository secret; the installer's closing hint and the section above say so. Rollout: the copies already in the org repos predate the gate and were switched off the same day with `gh workflow disable`; a repo picks the gate up when the installer is re-run there, followed by `gh workflow enable resolve-copilot-comments.yml`.
