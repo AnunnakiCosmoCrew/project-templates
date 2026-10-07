@@ -8,6 +8,7 @@
 #   claude setup-token                                   # prints a Max OAuth token
 #   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>
 #   gh variable set CLAUDE_REVIEW_ENABLED --body true --repo <owner>/<repo>
+#   gh label create claude-review --color 5319e7 --repo <owner>/<repo>   # backfill label
 set -euo pipefail
 usage='usage: install-claude-review-workflow.sh <repo-dir>'
 repo="${1:?$usage}"
@@ -22,3 +23,4 @@ echo "Installed $dest_dir/claude-review.yml"
 echo "The workflow is off (and free) until the repo opts in. To enable it:"
 echo "  gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>   # token from: claude setup-token"
 echo "  gh variable set CLAUDE_REVIEW_ENABLED --body true --repo <owner>/<repo>"
+echo "  gh label create claude-review --color 5319e7 --repo <owner>/<repo>   # add it to an old PR to review it on demand"
