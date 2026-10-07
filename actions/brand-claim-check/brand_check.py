@@ -76,11 +76,15 @@ def glob_to_regex(pattern: str) -> "re.Pattern[str]":
         elif c == "?":
             out.append("[^/]")
         elif c == "[":
-            j = pattern.find("]", i + 1)
+            j = pattern.find("]", i + 2)  # "]" right after "[" or "[!" is a literal member
             if j == -1:
                 out.append(re.escape(c))
             else:
-                out.append(pattern[i : j + 1])
+                body = pattern[i + 1 : j]
+                if body.startswith("!"):
+                    out.append("[^/" + body[1:] + "]")   # negated class, never crosses "/"
+                else:
+                    out.append("(?!/)[" + body + "]")    # class members never include "/"
                 i = j
         else:
             out.append(re.escape(c))
@@ -135,10 +139,14 @@ class Rule:
         if not isinstance(paths, list) or not paths or not all(isinstance(p, str) for p in paths):
             raise RulesError(f"rule {self.id}: 'paths' must be a non-empty list of globs")
         self.paths = Matcher(paths)
-        self.exclude = Matcher(raw.get("exclude") or [])
-        self.allow: List[str] = list(raw.get("allow") or [])
-        if not all(isinstance(a, str) and a for a in self.allow):
-            raise RulesError(f"rule {self.id}: 'allow' must be a list of non-empty strings")
+        exclude = raw.get("exclude", [])
+        if not isinstance(exclude, list) or not all(isinstance(p, str) and p for p in exclude):
+            raise RulesError(f"rule {self.id}: 'exclude' must be a list of globs (a bare string would be read as single characters)")
+        self.exclude = Matcher(exclude)
+        allow = raw.get("allow", [])
+        if not isinstance(allow, list) or not all(isinstance(a, str) and a for a in allow):
+            raise RulesError(f"rule {self.id}: 'allow' must be a list of non-empty strings (a bare string would be read as single characters)")
+        self.allow: List[str] = list(allow)
         self.regex: Optional["re.Pattern[str]"] = None
         if self.kind in ("banned", "required"):
             pattern = raw.get("pattern")
@@ -165,26 +173,42 @@ class Rule:
         """Blank out the allow-listed exact strings so they cannot match a banned pattern."""
         for literal in self.allow:
             if literal in text:
-                text = text.replace(literal, " " * len(literal))
+                blank = "".join(ch if ch in "\r\n" else " " for ch in literal)
+                text = text.replace(literal, blank)
         return text
 
 
+def escape_data(value: str) -> str:
+    """Escape a workflow-command message (GitHub's rules: %, CR, LF)."""
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def escape_property(value: str) -> str:
+    """Escape a workflow-command property value (message rules plus ':' and ',')."""
+    return escape_data(value).replace(":", "%3A").replace(",", "%2C")
+
+
 class Finding:
-    def __init__(self, rule: Rule, path: str, line: int, message: str):
+    def __init__(self, rule: Rule, path: str, line: int, message: str, abs_path: str):
         self.rule = rule
-        self.path = path
+        self.path = path            # relative to the scan root, for humans
+        self.abs_path = abs_path    # absolute, for annotations
         self.line = line
         self.message = message
+
+    def workspace_path(self) -> str:
+        base = os.environ.get("GITHUB_WORKSPACE") or os.getcwd()
+        rel = os.path.relpath(self.abs_path, base)
+        return rel.replace(os.sep, "/")
 
     def render(self, fmt: str) -> str:
         label = "warning" if self.rule.severity == "warn" else "error"
         where = f"{self.path}:{self.line}" if self.line else self.path
         text = f"[{self.rule.id}] {self.message} — {self.rule.why}"
         if fmt == "github":
-            loc = f"file={self.path}" + (f",line={self.line}" if self.line else "")
-            # "::" inside the message would end the annotation early.
-            safe = text.replace("\n", " ").replace("::", ": :")
-            return f"::{label} {loc},title=brand-check {self.rule.id}::{safe}"
+            loc = f"file={escape_property(self.workspace_path())}" + (f",line={self.line}" if self.line else "")
+            title = escape_property(f"brand-check {self.rule.id}")
+            return f"::{label} {loc},title={title}::{escape_data(text)}"
         return f"{where}: {label}: {text}"
 
 
@@ -224,7 +248,7 @@ def walk(root: str, ignored: Matcher) -> List[str]:
         rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
         rel_dir = "" if rel_dir == "." else rel_dir + "/"
         # Prune ignored directories early (".git/**" matches ".git/anything").
-        dirnames[:] = sorted(d for d in dirnames if not ignored(rel_dir + d + "/x") and not ignored(rel_dir + d))
+        dirnames[:] = sorted(d for d in dirnames if not ignored(rel_dir + d + "/") and not ignored(rel_dir + d))
         for name in sorted(filenames):
             rel = rel_dir + name
             if not ignored(rel):
@@ -260,11 +284,17 @@ def scan(root: str, ignored: Matcher, rules: List[Rule]) -> List[Finding]:
     files = walk(root, ignored)
     text_rules = [r for r in rules if r.kind in ("banned", "required")]
     cache: Dict[str, Optional[str]] = {}
+    seen: Dict[str, int] = {r.id: 0 for r in text_rules}
+
+    def finding(rule: Rule, rel: str, line: int, message: str) -> Finding:
+        return Finding(rule, rel, line, message, os.path.join(root, rel))
 
     for rel in files:
         applicable = [r for r in text_rules if r.applies_to(rel)]
         if not applicable:
             continue
+        for rule in applicable:
+            seen[rule.id] += 1
         if rel not in cache:
             cache[rel] = read_text(os.path.join(root, rel))
         text = cache[rel]
@@ -276,20 +306,24 @@ def scan(root: str, ignored: Matcher, rules: List[Rule]) -> List[Finding]:
                 haystack = rule.scrub(text)
                 for m in rule.regex.finditer(haystack):
                     findings.append(
-                        Finding(rule, rel, line_of(haystack, m.start()), f"banned: {excerpt(haystack, m.start(), m.end())!r}")
+                        finding(rule, rel, line_of(haystack, m.start()), f"banned: {excerpt(haystack, m.start(), m.end())!r}")
                     )
             else:  # required
                 if not rule.regex.search(text):
-                    findings.append(Finding(rule, rel, 0, f"required pattern not found: /{rule.regex.pattern}/"))
+                    findings.append(finding(rule, rel, 0, f"required pattern not found: /{rule.regex.pattern}/"))
 
     for rule in rules:
-        if rule.kind == "file-banned":
+        if rule.kind == "required" and seen[rule.id] == 0:
+            # A required rule that selects no file at all would otherwise pass silently
+            # (e.g. the page it guards was deleted).
+            findings.append(Finding(rule, root_label(root), 0, f"required rule matched no file under {rule_paths(rule)}", root))
+        elif rule.kind == "file-banned":
             for rel in files:
                 if rule.applies_to(rel):
-                    findings.append(Finding(rule, rel, 0, "file must not exist"))
+                    findings.append(finding(rule, rel, 0, "file must not exist"))
         elif rule.kind == "file-required":
             if not any(rule.applies_to(rel) for rel in files):
-                findings.append(Finding(rule, root_label(root), 0, f"no file matches {rule_paths(rule)}"))
+                findings.append(Finding(rule, root_label(root), 0, f"no file matches {rule_paths(rule)}", root))
         elif rule.kind == "pair":
             findings.extend(check_pair(rule, files, root))
     return findings
@@ -333,10 +367,10 @@ def check_pair(rule: Rule, files: List[str], root: str) -> List[Finding]:
 
     for inner, rel in sorted(left_files.items()):
         if inner not in right_files:
-            out.append(Finding(rule, rel, 0, f"has no counterpart {right_prefix}{inner}"))
+            out.append(Finding(rule, rel, 0, f"has no counterpart {right_prefix}{inner}", os.path.join(root, rel)))
     for inner, rel in sorted(right_files.items()):
         if inner not in left_files:
-            out.append(Finding(rule, rel, 0, f"has no counterpart {left_prefix}{inner}"))
+            out.append(Finding(rule, rel, 0, f"has no counterpart {left_prefix}{inner}", os.path.join(root, rel)))
     return out
 
 
@@ -376,6 +410,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if fmt == "github" and errors:
         print(f"::error title=brand-check::{summary}")
     print(summary)
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as fh:
+            fh.write(f"errors={len(errors)}\nwarnings={len(warnings)}\nrules={len(rules)}\n")
     return 1 if errors else 0
 
 

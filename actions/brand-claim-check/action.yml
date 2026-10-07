@@ -24,10 +24,22 @@ inputs:
     required: false
     default: python3
 
+outputs:
+  errors:
+    description: Number of error-level findings.
+    value: ${{ steps.check.outputs.errors }}
+  warnings:
+    description: Number of warning-level findings.
+    value: ${{ steps.check.outputs.warnings }}
+  rules:
+    description: Number of rules evaluated.
+    value: ${{ steps.check.outputs.rules }}
+
 runs:
   using: composite
   steps:
     - name: Brand and claim check
+      id: check
       shell: bash
       env:
         BRAND_CHECK_RULES: ${{ inputs.rules }}

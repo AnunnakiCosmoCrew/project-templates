@@ -106,7 +106,7 @@ rules file's `root` at `.` (or at `site/`).
 | kind | meaning | finding |
 | --- | --- | --- |
 | `banned` | `pattern` must not match anywhere in a file that `paths` selects | one per match, with `file:line` and the matched text |
-| `required` | every file that `paths` selects must contain at least one match of `pattern` | one per file without a match |
+| `required` | every file that `paths` selects must contain at least one match of `pattern`; a required rule that selects **no** file at all is itself a finding (the page it guards was deleted) | one per file without a match |
 | `file-banned` | no file may exist at `paths` (e.g. `/CNAME` before a domain is registered) | one per existing file |
 | `file-required` | at least one file must exist at `paths` (e.g. `/index.html`) | one per rule |
 | `pair` | every file under `left` that `paths` selects has a twin under `right`, and vice versa (locale parity: `left: ""`, `right: "en/"`) | one per missing twin |
@@ -123,11 +123,21 @@ Prefer `allow` for one-off exact strings and `exclude` for whole files (a
 `CLAUDE.md` that *quotes* the forbidden claim in order to forbid it, test
 fixtures, frozen historical documents).
 
+An allowed string is blanked **wherever** it occurs, so make it carry its
+context: allow `"legalName":"Example Enerji A.Ş."` (the JSON-LD property) or
+the footer's `<p class="legal">Example Enerji A.Ş.</p>`, not the bare name,
+or a headline that repeats the name would pass too. Line breaks inside an
+allowed string are preserved, so later line numbers stay right. `allow` and
+`exclude` must be JSON lists; a bare string is rejected as a configuration
+error rather than being read as single characters.
+
 ### Globs
 
 `.gitignore` semantics: a pattern without `/` matches the basename at any depth
 (`*.html`, `CNAME`); a leading `/` anchors it to the scan root (`/index.html`);
-`**` spans directories; `*` and `?` never cross `/`.
+`**` spans directories; `*`, `?` and `[…]` classes never cross `/`; `[!…]`
+negates a class. Top-level `ignore` patterns prune directories by their real
+path (`dist/_astro/**`, `coverage/**`) and are matched against files too.
 
 ### Regex notes
 
@@ -148,8 +158,11 @@ once the content is fixed.
 
 ## Output
 
-Plain text locally, GitHub annotations under `GITHUB_ACTIONS=true` (or
-`--format github`):
+Plain text locally (paths relative to the scan root), GitHub annotations under
+`GITHUB_ACTIONS=true` (or `--format github`; paths relative to
+`GITHUB_WORKSPACE`, message and properties escaped per the workflow-command
+rules). Under Actions the counts are also written to `GITHUB_OUTPUT` as
+`errors`, `warnings` and `rules`, which the composite action exposes as outputs:
 
 ```
 dist/en/about/index.html:41: error: [no-street-address] banned: 'Yalıkent' — LUVITA.md: the registered office is the founder's home.

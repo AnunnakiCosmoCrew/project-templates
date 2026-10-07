@@ -36,8 +36,18 @@ jobs:
           rules: actions/brand-claim-check/tests/fixtures/rules.json
         continue-on-error: true
 
-      - name: Assert the previous step failed
-        if: steps.fixture.outcome != 'failure'
+      # Not "any failure": the action must have scanned and counted exactly what the
+      # fixtures plant (7 errors, 2 warnings over 10 rules), so a broken script path or a
+      # rules-loading error (exit 2, no counts) fails this step too.
+      - name: Assert the action failed for the right reason
+        env:
+          OUTCOME: ${{ steps.fixture.outcome }}
+          ERRORS: ${{ steps.fixture.outputs.errors }}
+          WARNINGS: ${{ steps.fixture.outputs.warnings }}
+          RULES: ${{ steps.fixture.outputs.rules }}
         run: |
-          echo "::error::brand-claim-check passed a fixture tree that violates its rules"
-          exit 1
+          echo "outcome=$OUTCOME errors=$ERRORS warnings=$WARNINGS rules=$RULES"
+          [ "$OUTCOME" = "failure" ] && [ "$ERRORS" = "7" ] && [ "$WARNINGS" = "2" ] && [ "$RULES" = "10" ] || {
+            echo "::error::brand-claim-check did not report the fixture violations as expected"
+            exit 1
+          }

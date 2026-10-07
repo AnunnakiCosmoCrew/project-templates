@@ -49,6 +49,12 @@ class GlobTests(unittest.TestCase):
         self.assertTrue(self.match("en/[a-c]*.html", "en/about.html"))
         self.assertFalse(self.match("en/[a-c]*.html", "en/index.html"))
 
+    def test_negated_class_and_classes_never_cross_directories(self):
+        self.assertTrue(self.match("/[!a]*.html", "b.html"))
+        self.assertFalse(self.match("/[!a]*.html", "a.html"))
+        self.assertFalse(self.match("/[!a]*.html", "x/b.html"))
+        self.assertFalse(self.match("/a[/]b", "a/b"))
+
 
 class ScanTests(unittest.TestCase):
     @classmethod
@@ -101,8 +107,10 @@ class CliTests(unittest.TestCase):
     def test_github_format_emits_annotations(self):
         code, out = run("--rules", RULES, "--format", "github")
         self.assertEqual(code, 1)
-        self.assertIn("::error file=index.html,line=6,title=brand-check no-street::", out)
-        self.assertIn("::warning file=about.html,line=2,title=brand-check no-timing::", out)
+        # Annotation paths are workspace-relative (GITHUB_WORKSPACE, else the cwd), not root-relative.
+        rel = os.path.relpath(os.path.join(FIXTURES, "site"), os.getcwd()).replace(os.sep, "/")
+        self.assertIn(f"::error file={rel}/index.html,line=6,title=brand-check no-street::", out)
+        self.assertIn(f"::warning file={rel}/about.html,line=2,title=brand-check no-timing::", out)
 
     def test_root_override_and_clean_tree_exit_zero(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -128,6 +136,80 @@ class CliTests(unittest.TestCase):
             code, out = run("--rules", bad)
             self.assertEqual(code, 2)
             self.assertIn("'why' is required", out)
+
+    def test_string_valued_allow_or_exclude_is_a_configuration_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = os.path.join(tmp, "rules.json")
+            for field in ("allow", "exclude"):
+                with open(bad, "w", encoding="utf-8") as fh:
+                    json.dump({"rules": [{"id": "x", "kind": "banned", "pattern": "a", "paths": ["*"], "why": "y", field: "drafts/**"}]}, fh)
+                code, out = run("--rules", bad)
+                self.assertEqual(code, 2, out)
+                self.assertIn(f"'{field}' must be a list", out)
+
+    def test_required_rule_that_selects_no_file_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rules = os.path.join(tmp, "rules.json")
+            with open(rules, "w", encoding="utf-8") as fh:
+                json.dump({"rules": [{"id": "footer", "kind": "required", "pattern": "x", "paths": ["/index.html"], "why": "y"}]}, fh)
+            code, out = run("--rules", rules, "--root", tmp)
+            self.assertEqual(code, 1, out)
+            self.assertIn("[footer] required rule matched no file under /index.html", out)
+
+    def test_ignore_prunes_the_real_directory_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "pages"))
+            with open(os.path.join(tmp, "pages", "claim.html"), "w", encoding="utf-8") as fh:
+                fh.write("banned-word")
+            rules = os.path.join(tmp, "rules.json")
+            with open(rules, "w", encoding="utf-8") as fh:
+                json.dump({"ignore": ["pages/x"], "rules": [{"id": "w", "kind": "banned", "pattern": "banned-word", "paths": ["**/*.html"], "why": "y"}]}, fh)
+            code, out = run("--rules", rules, "--root", tmp)
+            self.assertEqual(code, 1, out)
+            with open(rules, "w", encoding="utf-8") as fh:
+                json.dump({"ignore": ["pages/**"], "rules": [{"id": "w", "kind": "banned", "pattern": "banned-word", "paths": ["**/*.html"], "why": "y"}]}, fh)
+            code, out = run("--rules", rules, "--root", tmp)
+            self.assertEqual(code, 0, out)
+
+    def test_multiline_allow_keeps_line_numbers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "a.md"), "w", encoding="utf-8") as fh:
+                fh.write("legal name\nspans lines\nthen a banned word\n")
+            rules = os.path.join(tmp, "rules.json")
+            with open(rules, "w", encoding="utf-8") as fh:
+                json.dump({"rules": [{"id": "w", "kind": "banned", "pattern": "banned", "paths": ["*.md"], "allow": ["legal name\nspans lines"], "why": "y"}]}, fh)
+            code, out = run("--rules", rules, "--root", tmp)
+            self.assertIn("a.md:3: error: [w]", out)
+
+    def test_github_annotations_are_workspace_relative_and_escaped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "site", "en"))
+            with open(os.path.join(tmp, "site", "en", "index.html"), "w", encoding="utf-8") as fh:
+                fh.write("<p>bad:thing</p>")
+            rules = os.path.join(tmp, "rules.json")
+            with open(rules, "w", encoding="utf-8") as fh:
+                json.dump({"root": "site", "rules": [{"id": "w,x", "kind": "banned", "pattern": "bad:thing", "paths": ["**/*.html"], "why": "100% sure"}]}, fh)
+            old = os.environ.get("GITHUB_WORKSPACE")
+            os.environ["GITHUB_WORKSPACE"] = tmp
+            try:
+                code, out = run("--rules", rules, "--format", "github")
+            finally:
+                if old is None:
+                    del os.environ["GITHUB_WORKSPACE"]
+                else:
+                    os.environ["GITHUB_WORKSPACE"] = old
+            self.assertIn("::error file=site/en/index.html,line=1,title=brand-check w%2Cx::[w,x] banned: 'bad:thing' — 100%25 sure", out)
+
+    def test_github_output_receives_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_file = os.path.join(tmp, "out.txt")
+            os.environ["GITHUB_OUTPUT"] = out_file
+            try:
+                run("--rules", RULES, "--format", "text")
+            finally:
+                del os.environ["GITHUB_OUTPUT"]
+            with open(out_file, encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "errors=7\nwarnings=2\nrules=10\n")
 
     def test_missing_root_exit_two(self):
         with tempfile.TemporaryDirectory() as tmp:
