@@ -1,0 +1,30 @@
+name: actions-test
+
+# Shell tests for the scripts in scripts/ that install generated files
+# (placeholder substitution, idempotency, bad-input rejection). Paths-filtered
+# so a docs-only PR never reports this job (emirers/registry.yaml lists it as
+# optional_checks for this repo for exactly that reason).
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test install-bug-workflows.sh
+        run: ./scripts/test-install-bug-workflows.sh

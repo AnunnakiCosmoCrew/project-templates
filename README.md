@@ -16,6 +16,9 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
 | [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Canonical "Claude PR review" workflow: reviews every same-repo PR with `claude-code-action`, authenticated with the Max subscription (`CLAUDE_CODE_OAUTH_TOKEN`). Advisory, never a required check. Replaces Copilot review. |
 | [`scripts/install-claude-review-workflow.sh`](scripts/install-claude-review-workflow.sh) | Copies the Claude review workflow into a repo's `.github/workflows/claude-review.yml`. Off until the repo sets `CLAUDE_REVIEW_ENABLED=true` and the token secret. Idempotent. |
+| [`workflows/bug-close-audit.yml`](workflows/bug-close-audit.yml) | Canonical "Bug close audit" workflow: reopens a bug issue closed without a qualifying commit on `main` in the 7 days after its last reopen. Always on (event-triggered on `issues: closed`), no opt-in switch. |
+| [`workflows/bug-needs-test.yml`](workflows/bug-needs-test.yml) | Canonical "Bug test coverage" workflow: a required check ("Bug PRs must add test lines") that blocks a bug-labelled PR with no added test lines, unless it carries `no-test-required`. |
+| [`scripts/install-bug-workflows.sh`](scripts/install-bug-workflows.sh) | Copies both bug workflows into a repo's `.github/workflows/`, substituting that repo's issue-key prefix and bug-label name. Idempotent. |
 
 ## The contract
 
@@ -136,6 +139,42 @@ The canonical file carries a `{{PR_CHECK_WORKFLOW}}` placeholder the script fill
 Leave the name out and the script reuses the one in an already-installed copy, or picks
 the repo's only `pull_request` workflow. If there are several, it lists them and stops.
 
+## Bug workflows: close audit + test coverage (code repos)
+
+Two workflows, ported from `WordPower-app` (the first repo to carry them) and
+parameterized here so every code repo can install its own copy:
+
+- **[`bug-close-audit.yml`](workflows/bug-close-audit.yml)** reopens a
+  bug-labelled issue that was closed without evidence a fix landed: if it was
+  reopened in the last 7 days and no commit on `main` since that reopen
+  references it (`#N` or `<PREFIX>-N`), the close is reverted with an
+  explanatory comment. Enforces "a linked PR is not proof of a fix" (global
+  CLAUDE.md). Event-triggered (`issues: closed`), no opt-in switch, no cost
+  until a bug issue is actually closed.
+- **[`bug-needs-test.yml`](workflows/bug-needs-test.yml)** is a required
+  check, "Bug PRs must add test lines": blocks merge of a bug-labelled PR
+  that adds no lines under common test paths/conventions, unless the PR
+  carries `no-test-required` (leave a comment explaining why when you apply
+  it). Event-triggered (`pull_request`), always runs so a required check
+  that silently never runs can't block merge by omission.
+
+Both carry `{{ISSUE_KEY_PREFIX}}` / `{{BUG_LABEL}}` placeholders, substituted
+at install time:
+
+```bash
+./scripts/install-bug-workflows.sh ~/Projects/Pelerin PEL bug
+```
+
+Check the repo's existing labels first (`gh label list --repo <owner>/<repo>`)
+— most repos already have a `bug` label; create `no-test-required` if it
+doesn't exist yet (`gh label create no-test-required --repo <owner>/<repo>`,
+installer prints the exact commands). After installing, add `Bug PRs must add
+test lines` to the repo's required-checks ruleset.
+
+Respect each repo's `agent_cap` (`emirers/registry.yaml`, default 3) when
+rolling this out across the fleet: skip a repo already at or over its
+worktree cap rather than exceeding it, and say so instead.
+
 ## Bootstrap a new project
 
 ```bash
@@ -208,6 +247,7 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 
 ## Version history
 
+- **2026-10-07** — Added `bug-close-audit.yml` and `bug-needs-test.yml` as canonical workflows (W8, [#27](https://github.com/AnunnakiCosmoCrew/project-templates/issues/27)), ported from `WordPower-app` — the only repo enforcing "a linked PR is not proof of a fix" and "red reproducer before green fix" in CI, despite both rules being stated in ten `CLAUDE.md` files. `bug-needs-test.yml`'s Flutter/Gradle test paths became ecosystem-generic globs; both workflows' bug-label and issue-key-prefix are now `{{BUG_LABEL}}` / `{{ISSUE_KEY_PREFIX}}` placeholders, substituted by the new `install-bug-workflows.sh`, same approach as `{{PR_CHECK_WORKFLOW}}`. Added `scripts/test-install-bug-workflows.sh` and a new `actions-test.yml` CI workflow to run it (no `actionlint` yet — not previously used in this repo).
 - **2026-10-07** — Brought the templates in line with how the org works now. The contract names the real barriers: the `main-protection` ruleset (PR required, threads resolved, linear history, required checks) and the `git-guard.py` hook from `emirers`, installed through managed settings. Native "Blocked by" links are the source of truth for dependencies, `Dependent` is only a readable mirror (`#N` same-repo, `owner/repo#N` cross-repo), and `issue-start` now looks the blockers up before it touches the board and stops on an open one. `Model & Effort` uses the `Model · tier (reason)` format with current models. `pr-open` documents the merge safeguards. The fresh-repo bootstrap seeds `main` (`--add-readme`), clones, and opens the bootstrap PR from a branch that follows the repo's own prefix and issue-number convention. The `setup-project-board.sh` header was updated to match. Raised by Copilot review on #14.
 - **2026-10-06** — The machine-global layer moved to the private `emirers` repo (luvita-docs ADR 0003): `global/scripts/prune-*.sh` and `global/skills/worktree` are removed from here because the installed copies had moved on (merged-PR proof, harness worktree grace) and re-running the installer would have downgraded them; `install-global-workflow.sh` now installs only `/resolve-copilot`. This repo is public, and the fleet scripts know the portfolio.
 - **2026-10-04** — Tightened the Copilot-resolve instructions after a review of 22 local `/resolve-copilot` runs. The command now lives here under `global/commands/` and is installed by `install-global-workflow.sh`. The workflow prompt gets the same steps. The runs handled Copilot's points well but improvised the rest. They used three different reply APIs, five of which errored (string IDs, `gh api --repo`, GraphQL built by interpolation). They piped `git push` through `tail`, which hides a rejected push. They held the reply and resolve behind long builds or CI until the user re-ran the command. They checked out PR branches in main clones. The command's "ignore outdated" rule would have skipped live threads. Both now carry: one paginated GraphQL thread query (outdated threads included, review-body findings checked); reply and resolve mutations that take variables, joined by `&&` so a failed reply never resolves; a fixed / declined / left-open rule for what to reply and resolve; and an unpiped push, verified against `@{u}`. The command also works in the branch's worktree, runs only the checks that cover the changed files, and never waits on CI. The workflow still works only threads with no reply yet, matching what its scan triggers on, so it never replies twice to a thread an earlier run left open. It now passes the owner and the bare repository name separately to GraphQL. It does not start for findings that sit only in a review body; those are left to a local `/resolve-copilot` pass. The workflow's trust boundary is unchanged: still no build or tests, still only `gh` and `git`.
