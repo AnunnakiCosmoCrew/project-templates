@@ -32,7 +32,11 @@ permissions:
   contents: read
 jobs:
   audit:
-    if: contains(github.event.issue.labels.*.name, '{{BUG_LABEL}}')
+    # state_reason != 'not_planned' excludes won't-fix/duplicate closes: those
+    # legitimately have no fix commit, so without this check a bug reopened
+    # and then closed as not-planned within 7 days gets auto-reopened, and
+    # again on every re-close.
+    if: contains(github.event.issue.labels.*.name, '{{BUG_LABEL}}') && github.event.issue.state_reason != 'not_planned'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
