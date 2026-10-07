@@ -1,10 +1,10 @@
 ---
-description: Address and resolve the review comments Copilot left on a PR
+description: Address and resolve the review comments the review bots (Claude, and Copilot when it runs) left on a PR
 argument-hint: "[PR number or URL — optional; defaults to the current branch's PR]"
 allowed-tools: Bash(gh:*), Bash(git:*), Read, Edit, Write, Grep, Glob
 ---
 
-Address and resolve the review comments GitHub Copilot left on a pull request, then **finish**: every Copilot thread ends this run either resolved or answered with a stated reason. Don't stop halfway to wait for CI.
+Address and resolve the review comments the review bots left on a pull request: the Claude PR review workflow (the standard reviewer since 2026-10-07) and GitHub Copilot when it runs. "Copilot" below means either bot. Address them then **finish**: every Copilot thread ends this run either resolved or answered with a stated reason. Don't stop halfway to wait for CI.
 
 Target PR: $ARGUMENTS
 If that is empty, use the PR for the current branch: `gh pr view --json number,url,headRefName`.
@@ -39,10 +39,11 @@ query($owner:String!,$repo:String!,$num:Int!,$after:String){
         comments(first:20){ nodes{ databaseId author{login} body createdAt } } } } } } }'
 ```
 
-- A thread is Copilot's when its **first** comment's author login contains `copilot`. GraphQL returns `copilot-pull-request-reviewer` and REST returns `copilot-pull-request-reviewer[bot]`, so match on the substring.
+- A thread is a review bot's when its **first** comment's author login contains `copilot` or `claude`. GraphQL drops the `[bot]` suffix that REST adds (`copilot-pull-request-reviewer` / `copilot-pull-request-reviewer[bot]`, `claude` / `claude[bot]`), so match on the substring.
+- A Claude comment may carry a ```suggestion block. Apply it only after judging it like any other finding; never commit it blind.
 - Work every **unresolved** Copilot thread, **outdated ones included**. Outdated only means the lines moved; the point may still stand. Check it against the current code. An outdated thread has `line: null`, so locate it by `originalLine` and the quoted code.
 - An unresolved thread that already has a reply, and no Copilot comment after it, was deliberately left open by an earlier pass. Don't reply to it again. List it in the summary as still open.
-- Also read Copilot's review bodies (`gh api repos/OWNER/REPO/pulls/NUMBER/reviews --paginate`). Look for findings that have no thread: the "Comments suppressed due to low confidence" section, and suggestions given only in the summary. Judge them like the others. They can't be resolved, so report them in the summary at the end.
+- Also read the bots' review bodies (Claude ends with one summary review) (`gh api repos/OWNER/REPO/pulls/NUMBER/reviews --paginate`). Look for findings that have no thread: the "Comments suppressed due to low confidence" section, and suggestions given only in the summary. Judge them like the others. They can't be resolved, so report them in the summary at the end.
 
 ## 3. Decide on each thread, and fix
 

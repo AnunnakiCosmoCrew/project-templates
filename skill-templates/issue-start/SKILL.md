@@ -64,10 +64,10 @@ Once implementation is finished and local checks pass:
 
 1. Commit using `{{ISSUE_PREFIX}}-<N> <type>[(<scope>)]: description`.
 2. Push with `-u` to `origin`.
-3. Transition into the `pr-open` skill — it handles the PR body (`Closes #<N>`), required checks, Copilot review watching, and thread resolution.
-4. Notify the user when the PR is green and Copilot threads are resolved.
+3. Transition into the `pr-open` skill — it handles the PR body (`Closes #<N>`), required checks, Claude review watching, and thread resolution.
+4. Notify the user when the PR is green and review threads are resolved.
 
-Do not stop after pushing — the agent owns the PR + Copilot loop unless the user says otherwise.
+Do not stop after pushing — the agent owns the PR + review loop unless the user says otherwise.
 
 ## Do NOT skip
 

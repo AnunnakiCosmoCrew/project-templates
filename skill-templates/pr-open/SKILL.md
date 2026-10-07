@@ -1,6 +1,6 @@
 ---
 name: pr-open
-description: Open a pull request for a {{PROJECT_NAME}} feature branch, then watch for Copilot review and resolve threads. Use when the user says "open the PR", "ship it", "create a PR", or after pushing a feature branch that's ready for review. Handles the required-checks list and Copilot thread resolution.
+description: Open a pull request for a {{PROJECT_NAME}} feature branch, then watch for the Claude review and resolve threads. Use when the user says "open the PR", "ship it", "create a PR", or after pushing a feature branch that's ready for review. Handles the required-checks list and review-thread resolution.
 ---
 
 <!-- TEMPLATE NOTE (stripped by install-workflow.sh):
@@ -45,11 +45,11 @@ A PR will not merge until ALL pass:
 
 If a required check is missing entirely, GitHub treats "did not run" as a blocker — fix the workflow, don't bypass.
 
-## 4. Copilot review
+## 4. Claude review
 
-Every PR is auto-reviewed by GitHub Copilot. Treat it like a human review.
+Every new non-draft PR is reviewed by the Claude PR review workflow (inline comments plus one summary review). Treat it like a human review.
 
-- **Every Copilot thread must be addressed**: reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. The `main-protection` ruleset blocks the merge otherwise, and `git-guard.py` refuses `gh pr merge` while a thread is open — replying alone does not resolve.
+- **Every review thread must be addressed** (Claude's, a human's, or Copilot's if it runs): reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. The `main-protection` ruleset blocks the merge otherwise, and `git-guard.py` refuses `gh pr merge` while a thread is open — replying alone does not resolve.
 - After opening the PR, **watch for the review autonomously**, resolve threads as they appear, and notify the user when everything is resolved and ready for their final merge call.
 
 ## 5. Hard rules

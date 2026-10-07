@@ -148,16 +148,17 @@ When fixing a bug, the failing test that reproduces it must be written and commi
   - <!-- FILL: e.g., `Static analysis` (Semgrep SAST) -->
 <!-- /OPTIONAL -->
 
-<!-- OPTIONAL: Copilot review. Delete this whole section if Copilot review
-     isn't enabled on this repo yet. -->
-### Copilot Code Review
+<!-- OPTIONAL: Claude review. Delete this whole section if the Claude PR
+     review workflow isn't installed on this repo yet
+     (project-templates/scripts/install-claude-review-workflow.sh). -->
+### Claude Code Review
 
-Every PR is auto-reviewed by GitHub Copilot (enabled at the org/repo level). Treat Copilot review like a human review:
+Every new non-draft PR is reviewed by the Claude PR review workflow (`.github/workflows/claude-review.yml`, Max OAuth token). It leaves inline comments, often with one-click suggestion blocks, and ends with one comment-only summary review. Treat it like a human review:
 
-- **Any thread Copilot opens must be addressed** — reply explaining the fix (or why no change is needed) **and** explicitly resolve the thread.
-- The `main-protection` ruleset blocks the merge until every Copilot (and human) thread is resolved, and `git-guard.py` refuses `gh pr merge` while one is open.
-- Copilot uses `.github/copilot-instructions.md` for project context — keep that file up to date when conventions change.
-- **If Copilot doesn't post a review within ~10 minutes** of PR open, ask once yourself: `gh pr edit <N> --add-reviewer @copilot`. Never add a `copilot-nudge` cron workflow: a 15-minute cron bills a full minute per poll and burns the org's Actions budget.
+- **Any thread Claude opens must be addressed**: reply with the fix (or why no change is needed) **and** explicitly resolve the thread. `/resolve-copilot` handles Claude's threads too.
+- The `main-protection` ruleset blocks the merge until every review thread is resolved, and `git-guard.py` refuses `gh pr merge` while one is open.
+- Claude judges the change against this `CLAUDE.md`; keep it current when conventions change.
+- The review runs once per PR, not per push. To get a fresh review (or one on a PR opened before the workflow existed), add the `claude-review` label. Never add a polling or nudge cron for it.
 <!-- /OPTIONAL -->
 
 ## Agent Workflow
