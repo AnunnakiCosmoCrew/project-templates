@@ -37,6 +37,43 @@ for f in "$close_audit" "$needs_test"; do
     || fail "$f is not valid YAML after substitution"
 done
 
+# --- functional: the installed test-path globs actually match ------------
+# Extract the real pathspec list from the installed file (not a hand-copied
+# duplicate that could drift) and exercise it against a scratch git repo
+# covering each ecosystem's top-level test convention. A plain pathspec
+# needs a literal `/` before `test` for `**/test/**` to match a top-level
+# test/ directory — exactly the bug three installs' auto-reviews caught.
+pathspecs=()
+while IFS= read -r spec; do
+  pathspecs+=("$spec")
+done < <(sed -n '/--numstat/,/| awk/p' "$needs_test" | grep -oE ":\(glob\)[^'\\]*")
+[ "${#pathspecs[@]}" -gt 0 ] || fail "could not extract test-path globs from bug-needs-test.yml"
+
+repo="$tmp/repo"
+mkdir -p "$repo"
+git -C "$repo" init -q -b main
+git -C "$repo" config user.email test@example.com
+git -C "$repo" config user.name test
+echo x > "$repo/README.md"
+git -C "$repo" -c commit.gpgsign=false add -A
+git -C "$repo" -c commit.gpgsign=false commit -q -m base
+git -C "$repo" switch -q -c work main
+
+case_added() {   # $1 = relative path to add one line under
+  git -C "$repo" reset -q --hard main
+  mkdir -p "$repo/$(dirname "$1")"
+  echo "line" >> "$repo/$1"
+  git -C "$repo" add "$1"
+  git -C "$repo" -c commit.gpgsign=false commit -q -m "add $1"
+  git -C "$repo" diff main..HEAD --numstat -- "${pathspecs[@]}" | awk '{s+=$1} END{print s+0}'
+}
+
+[ "$(case_added test/helpers/fake_x.dart)" -gt 0 ] || fail "top-level test/ not matched by the installed globs"
+[ "$(case_added tests/calendar/test_apple.py)" -gt 0 ] || fail "top-level tests/ not matched by the installed globs"
+[ "$(case_added integration_test/app_test.dart)" -gt 0 ] || fail "top-level integration_test/ not matched by the installed globs"
+[ "$(case_added src/test/java/x/FooTest.java)" -gt 0 ] || fail "nested src/test/java/ not matched by the installed globs"
+[ "$(case_added lib/foo.dart)" -eq 0 ] || fail "non-test file incorrectly counted as a test line"
+
 # --- idempotent re-run ---------------------------------------------------
 "$installer" "$tmp" PEL bug >/dev/null
 grep -q "PEL-" "$close_audit" || fail "re-run broke the substitution"

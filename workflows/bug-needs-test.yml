@@ -18,8 +18,11 @@ name: Bug test coverage
 #
 # TEST PATHS: the globs below are ecosystem-generic (JVM, Dart/Flutter,
 # JS/TS, Python test-directory and test-file conventions), replacing
-# WordPower's Flutter/Gradle-specific paths. If this repo's tests live
-# somewhere these don't match, add its path(s) to the `--` list below.
+# WordPower's Flutter/Gradle-specific paths. They use `:(glob)` pathspec
+# magic throughout — a plain pathspec needs a literal `/` before `test`,
+# so without it `**/test/**` never matches a top-level test/ directory.
+# If this repo's tests live somewhere these don't match, add its path(s)
+# (also `:(glob)`-prefixed) to the `--` list below.
 #
 # Canonical source: WordPower-app/.github/workflows/bug-needs-test.yml.
 
@@ -90,16 +93,21 @@ jobs:
 
           echo "PR is labelled {{BUG_LABEL}}. Counting added lines in test directories..."
 
+          # :(glob) magic is required for `**/` to match zero directories —
+          # a plain pathspec needs a literal `/` before `test`, so without it
+          # **/test/** never matches a top-level test/ (Flutter, JS/TS,
+          # Python all put tests there), silently counting 0 added lines.
           ADDED=$(git diff origin/main..HEAD --numstat \
             -- \
-            '**/test/**' \
-            '**/tests/**' \
-            '**/testing/**' \
-            '**/*.test.*' \
-            '**/*.spec.*' \
-            '**/*_test.*' \
-            '**/*Test.*' \
-            '**/test_*.*' \
+            ':(glob)**/test/**' \
+            ':(glob)**/tests/**' \
+            ':(glob)**/testing/**' \
+            ':(glob)**/integration_test/**' \
+            ':(glob)**/*.test.*' \
+            ':(glob)**/*.spec.*' \
+            ':(glob)**/*_test.*' \
+            ':(glob)**/*Test.*' \
+            ':(glob)**/test_*.*' \
             | awk '{ sum += $1 } END { print sum+0 }')
 
           echo "Added test lines: $ADDED"
