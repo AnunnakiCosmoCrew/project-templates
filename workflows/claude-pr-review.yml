@@ -92,11 +92,13 @@ jobs:
           case "$pr" in ''|*[!0-9]*) echo "::error::bad PR number: $pr"; exit 1;; esac
           echo "number=$pr" >> "$GITHUB_OUTPUT"
 
+      # Keep the credentials: claude-code-action runs `git fetch origin <head
+      # branch>` itself and fails on a private repo without them. The token is
+      # read-only here (`contents: read`), so nothing can be pushed with it.
       - name: Checkout (read-only, for context)
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          persist-credentials: false
 
       - name: Review the PR
         uses: anthropics/claude-code-action@v1
