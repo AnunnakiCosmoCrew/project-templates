@@ -1,0 +1,93 @@
+name: Bug close audit
+
+# Reopens a bug issue that was closed without evidence a fix actually landed.
+# If the issue was reopened (presumably with a fresh repro) in the last 7
+# days, and no commit on main since that reopen references the issue, the
+# close looks like a cargo-cult "looks fixed" close rather than a verified
+# one — see global CLAUDE.md "A linked PR is not proof of a fix".
+#
+# INSTALL: scripts/install-bug-workflows.sh <repo-dir> <issue-key-prefix> <bug-label>
+#   e.g.: scripts/install-bug-workflows.sh ~/Projects/Pelerin PEL bug
+#
+# PARAMETERS (substituted at install time, not runtime — same approach
+# install-copilot-workflow.sh uses for {{PR_CHECK_WORKFLOW}}):
+#   {{ISSUE_KEY_PREFIX}} — this repo's commit-prefix convention
+#     (emirers/registry.yaml `key`, e.g. PEL, HB, MER, LUV, DVN). A commit is
+#     credited to an issue when its message contains `#<N>` or
+#     `<PREFIX>-<N>` — squash-merge keeps the title only, so the body's
+#     `Closes #N` is often dropped and the prefixed key is the durable one.
+#   {{BUG_LABEL}} — the label this repo uses for bug issues. Check with
+#     `gh label list --repo <owner>/<repo>`; create it if missing:
+#     `gh label create <label> --repo <owner>/<repo>`.
+#
+# EVENT-TRIGGERED, not cron: costs nothing until an issue is actually closed.
+#
+# Canonical source: WordPower-app/.github/workflows/bug-close-audit.yml.
+
+on:
+  issues:
+    types: [closed]
+permissions:
+  issues: write
+  contents: read
+jobs:
+  audit:
+    # state_reason != 'not_planned' excludes won't-fix/duplicate closes: those
+    # legitimately have no fix commit, so without this check a bug reopened
+    # and then closed as not-planned within 7 days gets auto-reopened, and
+    # again on every re-close.
+    if: contains(github.event.issue.labels.*.name, '{{BUG_LABEL}}') && github.event.issue.state_reason != 'not_planned'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Most recent reopen event — but ignore reopens triggered by this
+          # workflow itself (actor.login == "github-actions[bot]"). Otherwise
+          # a close → audit-reopen → close cycle would lock the issue OPEN
+          # because the audit's own reopen always sits AFTER any fix commit
+          # we could land via PR.
+          # --paginate runs --jq once per page, so the filter must emit one
+          # timestamp per match and let `tail` pick the last one across all
+          # pages — a `last` inside --jq only sees its own page.
+          reopened_at=$(gh api "repos/$REPO/issues/$ISSUE/events?per_page=100" --paginate \
+            --jq '.[] | select(.event=="reopened" and .actor.login != "github-actions[bot]") | .created_at' \
+            | tail -n 1)
+          if [ -z "$reopened_at" ]; then
+            echo "Never reopened — nothing to audit."
+            exit 0
+          fi
+          # Within last 7 days?
+          if [ "$(date -d "$reopened_at" +%s)" -lt "$(date -d '7 days ago' +%s)" ]; then
+            echo "Last reopen older than 7d — nothing to audit."
+            exit 0
+          fi
+          # Any commit on main mentioning this issue since the reopen?
+          # Use full timestamp (not just date) to avoid counting commits from
+          # earlier the same day. --perl-regexp enables \b as a proper word
+          # boundary so #12 doesn't match #123. Accept either `#N` (PR body's
+          # `Closes #N`) or `{{ISSUE_KEY_PREFIX}}-N` (the commit-message
+          # convention).
+          commits=$(git log --since="$reopened_at" --perl-regexp --grep="(?:#|{{ISSUE_KEY_PREFIX}}-)$ISSUE\b" --pretty=format:%H origin/main | wc -l)
+          if [ "$commits" -gt 0 ]; then
+            echo "$commits commit(s) reference #$ISSUE on main since reopen — close looks legitimate."
+            exit 0
+          fi
+          # Block: reopen and post an explanatory comment.
+          # Body is built with printf so all content stays within the YAML
+          # block scalar's indentation level — bare lines at column 0 inside
+          # a run: | block terminate the block scalar prematurely and break
+          # the workflow file.
+          gh issue reopen $ISSUE -R $REPO
+          printf '%s\n\n%s\n\n%s\n\n%s' \
+            "🤖 **Auto-reopened.**" \
+            "This issue was reopened on \`$reopened_at\`, presumably with new evidence in a comment, and no commit referencing \`#$ISSUE\` has landed on \`main\` since." \
+            "If the prior fix attempt didn't address the reopen comment, please reproduce and verify before re-closing. If you believe the fix is genuinely in place, push a commit or PR with \`Closes #$ISSUE\` in the message so the audit trail is complete." \
+            "Enforces \"a linked PR is not proof of a fix\" (global CLAUDE.md)." \
+            | gh issue comment $ISSUE -R $REPO --body-file -
