@@ -19,6 +19,15 @@ Project board #{{PROJECT_BOARD_NUMBER}} (`{{REPO_OWNER}}` org) must reflect curr
 gh issue view <N> --repo {{REPO_OWNER}}/{{APP_REPO}} --json title,body,labels,projectItems
 ```
 
+Then check the issue's native blockers **before any board update** (the `gh issue view` fields above don't include them):
+
+```bash
+gh api repos/{{REPO_OWNER}}/{{APP_REPO}}/issues/<N>/dependencies/blocked_by \
+  --jq '.[] | select(.state=="open") | "\(.repository_url | sub(".*/repos/";""))#\(.number)"'
+```
+
+Any output means an open blocker: **stop**. Set the issue to `Blocked` (steps 2–3 apply, but not `In Progress`), report the blockers, and do not create a branch or worktree. Empty output means the issue is ready.
+
 Confirm with the user if scope is ambiguous. Note the labels — `bug` triggers Test-Driven Bug Fixing (a failing reproducer test commit **before** the fix; see CLAUDE.md).
 
 ## 2. Ensure issue is on the project board
@@ -33,7 +42,7 @@ Idempotent — safe to re-run. Issues created via `gh issue create` are NOT auto
 
 All required before code:
 
-- **Status** → `In Progress`
+- **Status** → `In Progress` (only once step 1 found no open blocker)
 - **Priority** → ask the user if not obvious from the issue body.
 - **Estimate** → Fibonacci `0, 1, 2, 3, 5, 8, 13`. Bugs are always `0`. The `gh` CLI refuses `--number 0` — use the raw `updateProjectV2ItemFieldValue` GraphQL mutation for bug estimates.
 - **Model & Effort** → `Model · tier (reason)` per the global CLAUDE.md, e.g. `Sonnet 5.5 · medium (routine endpoint)`.

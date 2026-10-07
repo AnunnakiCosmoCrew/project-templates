@@ -25,7 +25,7 @@ Any project that adopts these templates commits to a board with at least these f
 | `Priority` | single-select | Urgent / High / Medium / Low |
 | `Estimate` | number | Fibonacci story points (0, 1, 2, 3, 5, 8, 13) |
 | `Model & Effort` | text | `Model · tier (reason)`, e.g., `Sonnet 5.5 · medium (routine endpoint)`; current models Opus 5.5 / Sonnet 5.5 / Haiku 4.5 / Fable 5.1, tiers per the global CLAUDE.md |
-| `Dependent` | text | Readable mirror of the issue's native "Blocked by" links (the source of truth), e.g., `#412, #420` |
+| `Dependent` | text | Readable mirror of the issue's native "Blocked by" links (the source of truth), comma-separated; `#N` for a same-repo blocker, `owner/repo#N` for a cross-repo one, e.g., `#412, other-org/other-repo#420` |
 
 GitHub's native `Parent issue` and `Sub-issues progress` fields are also part of the workflow but exist on every project board by default — no setup needed.
 
@@ -140,8 +140,10 @@ the repo's only `pull_request` workflow. If there are several, it lists them and
 # 0. One-time per machine (if not done already): install the fleet layer (worktree skill, prune hook, guards)
 (cd ~/Projects/emirers && ./install.sh)   # private repo; then ./scripts/install-global-workflow.sh for /resolve-copilot
 
-# 1. Create the repo and project board (manually or via gh repo create + gh project create)
-gh repo create AnunnakiCosmoCrew/new-thing --public
+# 1. Create the repo and project board (manually or via gh repo create + gh project create).
+#    --add-readme seeds `main`, so the bootstrap PR in step 7 has a base branch.
+gh repo create AnunnakiCosmoCrew/new-thing --public --add-readme
+gh repo clone AnunnakiCosmoCrew/new-thing && cd new-thing
 gh project create --owner AnunnakiCosmoCrew --title "New Thing"   # note the project number
 
 # 2. Ensure standard board fields exist
@@ -170,10 +172,14 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    required_checks) and apply the org-standard main-protection ruleset from it
 #    (emirers/scripts/apply-rulesets.sh). Code and site repos take PRs only; git-guard
 #    refuses a push to main there, so the bootstrap lands as the repo's first PR:
-git checkout -b feature/1-bootstrap
+#    The branch follows the repo's own convention ({branch-prefix}-{issue N}-{slug}), so open
+#    the bootstrap issue first (the first issue of a fresh repo is #1) and use its number.
+gh issue create --title "Bootstrap CLAUDE.md and workflow skills" --body "Adopt project-templates."
+git checkout -b feature/nt-1-bootstrap
 git add CLAUDE.md .claude/skills .github/workflows/resolve-copilot-comments.yml
-git commit -m "chore: add CLAUDE.md, workflow skills + Copilot-resolve workflow (from project-templates)"
-git push -u origin feature/1-bootstrap && gh pr create --fill --reviewer @copilot
+git commit -m "NT-1 chore: add CLAUDE.md, workflow skills + Copilot-resolve workflow (from project-templates)"
+git push -u origin feature/nt-1-bootstrap
+gh pr create --title "NT-1 chore: bootstrap workflow files" --body "Closes #1" --reviewer @copilot
 ```
 
 ## Maintaining the templates
@@ -200,6 +206,7 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 
 ## Version history
 
+- **2026-10-07** — Brought the templates in line with how the org works now. The contract names the real barriers: the `main-protection` ruleset (PR required, threads resolved, linear history, required checks) and the `git-guard.py` hook from `emirers`, installed through managed settings. Native "Blocked by" links are the source of truth for dependencies, `Dependent` is only a readable mirror (`#N` same-repo, `owner/repo#N` cross-repo), and `issue-start` now looks the blockers up before it touches the board and stops on an open one. `Model & Effort` uses the `Model · tier (reason)` format with current models. `pr-open` documents the merge safeguards. The fresh-repo bootstrap seeds `main` (`--add-readme`), clones, and opens the bootstrap PR from a branch that follows the repo's own prefix and issue-number convention. The `setup-project-board.sh` header was updated to match. Raised by Copilot review on #14.
 - **2026-10-06** — The machine-global layer moved to the private `emirers` repo (luvita-docs ADR 0003): `global/scripts/prune-*.sh` and `global/skills/worktree` are removed from here because the installed copies had moved on (merged-PR proof, harness worktree grace) and re-running the installer would have downgraded them; `install-global-workflow.sh` now installs only `/resolve-copilot`. This repo is public, and the fleet scripts know the portfolio.
 - **2026-10-04** — Tightened the Copilot-resolve instructions after a review of 22 local `/resolve-copilot` runs. The command now lives here under `global/commands/` and is installed by `install-global-workflow.sh`. The workflow prompt gets the same steps. The runs handled Copilot's points well but improvised the rest. They used three different reply APIs, five of which errored (string IDs, `gh api --repo`, GraphQL built by interpolation). They piped `git push` through `tail`, which hides a rejected push. They held the reply and resolve behind long builds or CI until the user re-ran the command. They checked out PR branches in main clones. The command's "ignore outdated" rule would have skipped live threads. Both now carry: one paginated GraphQL thread query (outdated threads included, review-body findings checked); reply and resolve mutations that take variables, joined by `&&` so a failed reply never resolves; a fixed / declined / left-open rule for what to reply and resolve; and an unpiped push, verified against `@{u}`. The command also works in the branch's worktree, runs only the checks that cover the changed files, and never waits on CI. The workflow still works only threads with no reply yet, matching what its scan triggers on, so it never replies twice to a thread an earlier run left open. It now passes the owner and the bare repository name separately to GraphQL. It does not start for findings that sit only in a review body; those are left to a local `/resolve-copilot` pass. The workflow's trust boundary is unchanged: still no build or tests, still only `gh` and `git`.
 - **2026-10-03** — Fixed the `find-prs` scan never matching. It compared the first comment author of each review thread with `copilot-pull-request-reviewer[bot]`, but GraphQL returns that login **without** `[bot]` (the suffix only appears in the REST API and the UI; verified on AnunnakiCosmoCrew/divan PR #19), so once a repo opted in (`COPILOT_RESOLVE_ENABLED` + `ANTHROPIC_API_KEY`) no PR was ever picked up. The recheck stage already used the GraphQL form. Both jq filters now use `copilot-pull-request-reviewer`; the `[bot]` form stays only in the prompt text, which sends Claude to the REST API. Found by Copilot's own review of the divan copy. Copies that predate the fix are re-synced by re-running the installer, per repo.

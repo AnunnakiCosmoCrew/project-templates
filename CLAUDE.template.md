@@ -108,7 +108,7 @@ Examples:
 1. **Add issue to the project board** when creating via `gh issue create` (it does NOT auto-add). Use `gh project item-add {{PROJECT_BOARD_NUMBER}} --owner {{REPO_OWNER}} --url <issue-url>`. Then set board fields: `Status`, `Priority`, `Estimate`, `Model & Effort`, and `Dependent` (if applicable — see "Dependent vs. sub-issues" below).
 2. **Set an estimate** (Fibonacci: 0, 1, 2, 3, 5, 8, 13) on the project board. Bugs are `0`.
 3. **Set the `Model & Effort`** on the project board: format, model names and tiers per the global CLAUDE.md.
-4. **Record dependencies** as native GitHub "Blocked by" links (REST `POST /repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by` with `-F issue_id=<db id>`; cross-repo works) and mirror them in `Dependent` as a comma-separated list (e.g., `#412, #420`). An issue with an open blocker is `Blocked`, never `Todo`.
+4. **Record dependencies** as native GitHub "Blocked by" links (REST `POST /repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by` with `-F issue_id=<db id>`; cross-repo works) and mirror them in `Dependent` as a comma-separated list: `#N` for a same-repo blocker, `owner/repo#N` for a cross-repo one (e.g., `#412, other-org/other-repo#420`). An issue with an open blocker is `Blocked`, never `Todo`.
 5. **Move ticket to "In Progress"** on the project board before writing any code.
 6. **Create a feature branch** from latest `main`: `{{BRANCH_PREFIX}}-{N}-{slug}`.
 7. **Implement and verify**: run the commands from "Build / Test / Lint Commands" above. All must pass before pushing.
@@ -121,7 +121,7 @@ Examples:
 
 The board exposes two related fields for capturing how issues relate to each other. Choose deliberately:
 
-- **Native "Blocked by"** (source of truth) **+ `Dependent`** (text field, a readable mirror). Use when this issue is *blocked by* one or more **peer** issues — same scope tier, not nested. Mirror value: a comma-separated list of issue numbers, e.g., `#412, #420`. Read as "this is dependent on those". Update or clear both as blockers resolve; when closing an issue, move dependents whose blockers are all closed from `Blocked` to `Todo`.
+- **Native "Blocked by"** (source of truth) **+ `Dependent`** (text field, a readable mirror). Use when this issue is *blocked by* one or more **peer** issues — same scope tier, not nested. Mirror value: a comma-separated list of issue references, `#N` for a same-repo blocker and `owner/repo#N` for a cross-repo one, e.g., `#412, other-org/other-repo#420`. Read as "this is dependent on those". Update or clear both as blockers resolve; when closing an issue, move dependents whose blockers are all closed from `Blocked` to `Todo`.
 - **`Parent issue` + `Sub-issues progress`** (GitHub-native sub-issues). Use when this issue is one *step inside* a larger one. The parent is the umbrella, the children are the decomposition. Progress on the parent updates automatically as children close.
 
 **Heuristic:** if one issue can't start until another finishes but they aren't parts of the same larger thing, use `Dependent`. If they're slices of the same larger thing, use sub-issues. The two are not mutually exclusive — a child of one parent can also be `Dependent` on an unrelated peer.
