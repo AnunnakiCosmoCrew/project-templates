@@ -1,0 +1,20 @@
+{
+  "root": "site",
+  "rules": [
+    {"id": "no-street", "kind": "banned", "pattern": "yal[ıi]kent|69/25", "paths": ["**/*.html"], "exclude": ["drafts/**"],
+     "why": "the registered office is a home"},
+    {"id": "no-city", "kind": "banned", "pattern": "\\bBodrum\\b", "paths": ["**/*.html"],
+     "allow": ["\"addressLocality\":\"Bodrum\""], "why": "no city in visible copy; JSON-LD only"},
+    {"id": "no-enerji", "kind": "banned", "pattern": "Enerji", "paths": ["**/*.html"],
+     "allow": ["Example Holdings Enerji A.Ş."], "why": "trade name only in legal blocks"},
+    {"id": "attribution", "kind": "required", "pattern": "a brand of <a href=\"https://luvita\\.tr/\">Luvita Teknoloji Ltd\\. Şti\\.</a>",
+     "paths": ["**/*.html"], "exclude": ["drafts/**"], "why": "ADR 0001"},
+    {"id": "holder", "kind": "banned", "pattern": "©\\s*\\d{4}\\s*(?!CosmoCrew)\\S", "paths": ["**/*.html"], "why": "holder is CosmoCrew"},
+    {"id": "no-timing", "kind": "banned", "pattern": "\\b\\d+(\\.\\d+)?\\s*(ms|milliseconds)\\b", "paths": ["*.html"], "severity": "warn",
+     "why": "no latency figures"},
+    {"id": "no-cname", "kind": "file-banned", "paths": ["/CNAME"], "why": "domain not registered"},
+    {"id": "root-page", "kind": "file-required", "paths": ["/index.html"], "why": "root answers for itself"},
+    {"id": "sitemap", "kind": "file-required", "paths": ["/sitemap.xml"], "severity": "warn", "why": "nice to have"},
+    {"id": "parity", "kind": "pair", "left": "", "right": "en/", "paths": ["/*.html"], "why": "both locales"}
+  ]
+}
