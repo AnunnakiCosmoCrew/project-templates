@@ -24,8 +24,15 @@ name: Claude PR review
 # reopened). To review an older PR on demand, for example one opened while
 # Copilot's quota was out, add the `claude-review` label to it. Only that label
 # triggers a run; any other label is ignored by the job-level `if:`. Create the
-# label once per repo:
+# label once per repo (the label also works on a DRAFT, see below):
 #   gh label create claude-review --color 5319e7 --repo <owner>/<repo>
+#
+# DRAFT-FIRST REPOS: a draft is never reviewed automatically. Add the
+# `claude-review` label to review it while still a draft; once a PR carries the
+# label, `opened` and `ready_for_review` skip their automatic review, so
+# draft -> label -> fix threads -> `gh pr ready` costs exactly one review and
+# one full CI run. `reopened` still reviews. Remove and re-add the label to ask
+# for a fresh review.
 #
 # REVIEWERS SIDEBAR: a GitHub App cannot be a *requested* reviewer, but an
 # account that submits a review is listed under Reviewers. The prompt makes the
@@ -60,10 +67,13 @@ jobs:
     if: >-
       vars.CLAUDE_REVIEW_ENABLED == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.pull_request.draft == false &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event.pull_request.head.repo.full_name == github.repository &&
         github.actor != 'dependabot[bot]' &&
-        (github.event.action != 'labeled' || github.event.label.name == 'claude-review')))
+        ((github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
+         (github.event.action != 'labeled' &&
+          github.event.pull_request.draft == false &&
+          !((github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+            contains(github.event.pull_request.labels.*.name, 'claude-review'))))))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
