@@ -49,9 +49,13 @@ jobs:
           # a close → audit-reopen → close cycle would lock the issue OPEN
           # because the audit's own reopen always sits AFTER any fix commit
           # we could land via PR.
-          reopened_at=$(gh api "repos/$REPO/issues/$ISSUE/events" --paginate \
-            --jq '[.[] | select(.event=="reopened" and .actor.login != "github-actions[bot]")] | last | .created_at')
-          if [ -z "$reopened_at" ] || [ "$reopened_at" = "null" ]; then
+          # --paginate runs --jq once per page, so the filter must emit one
+          # timestamp per match and let `tail` pick the last one across all
+          # pages — a `last` inside --jq only sees its own page.
+          reopened_at=$(gh api "repos/$REPO/issues/$ISSUE/events?per_page=100" --paginate \
+            --jq '.[] | select(.event=="reopened" and .actor.login != "github-actions[bot]") | .created_at' \
+            | tail -n 1)
+          if [ -z "$reopened_at" ]; then
             echo "Never reopened — nothing to audit."
             exit 0
           fi
