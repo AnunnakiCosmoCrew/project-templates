@@ -7,8 +7,9 @@
 #   - Status      (single-select: Backlog, Todo, In Progress, In Review, Done, Blocked)
 #   - Priority    (single-select: Urgent, High, Medium, Low)
 #   - Estimate    (number — Fibonacci 0, 1, 2, 3, 5, 8, 13)
-#   - Model & Effort (text — recommended Claude model + effort, e.g., "Sonnet 4.6, medium")
-#   - Dependent   (text — comma-separated issue numbers this is blocked by)
+#   - Model & Effort (text — recommended Claude model + effort, `Model · tier (reason)`, e.g., "Sonnet 5.5 · medium (routine endpoint)")
+#   - Dependent   (text — readable mirror of the issue's native "Blocked by" links, which
+#                  are the source of truth; `#N` same-repo, `owner/repo#N` cross-repo)
 #
 # Fields that already exist are left untouched. This is so projects that prefer
 # P0/P1/P2 over Urgent/High/Medium/Low (etc.) keep their own option scheme — the
