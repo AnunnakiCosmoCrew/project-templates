@@ -14,6 +14,8 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | [`scripts/setup-project-board.sh`](scripts/setup-project-board.sh) | Idempotent script that ensures a GitHub Project (v2) board has the standard fields. |
 | [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
+| [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Canonical "Claude PR review" workflow: reviews every same-repo PR with `claude-code-action`, authenticated with the Max subscription (`CLAUDE_CODE_OAUTH_TOKEN`). Advisory, never a required check. Replaces Copilot review. |
+| [`scripts/install-claude-review-workflow.sh`](scripts/install-claude-review-workflow.sh) | Copies the Claude review workflow into a repo's `.github/workflows/claude-review.yml`. Off until the repo sets `CLAUDE_REVIEW_ENABLED=true` and the token secret. Idempotent. |
 
 ## The contract
 
