@@ -1,0 +1,53 @@
+name: Actions tests
+
+# Unit tests for the composite actions in actions/. Standard library only; runs in seconds.
+# PR-triggered so a change to a shared check is verified before any consumer picks it up.
+
+on:
+  pull_request:
+    paths:
+      - "actions/**"
+      - ".github/workflows/actions-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actions-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actions-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit tests (brand-claim-check)
+        run: python3 -m unittest discover -s actions/brand-claim-check/tests -v
+
+      # The action itself, end to end, against its own fixtures: the fixture tree is
+      # built to fail, so a green step here would mean the action stopped checking.
+      - name: Composite action fails on the violating fixture
+        id: fixture
+        uses: ./actions/brand-claim-check
+        with:
+          rules: actions/brand-claim-check/tests/fixtures/rules.json
+        continue-on-error: true
+
+      # Not "any failure": the action must have scanned and counted exactly what the
+      # fixtures plant (7 errors, 2 warnings over 10 rules), so a broken script path or a
+      # rules-loading error (exit 2, no counts) fails this step too.
+      - name: Assert the action failed for the right reason
+        env:
+          OUTCOME: ${{ steps.fixture.outcome }}
+          ERRORS: ${{ steps.fixture.outputs.errors }}
+          WARNINGS: ${{ steps.fixture.outputs.warnings }}
+          RULES: ${{ steps.fixture.outputs.rules }}
+        run: |
+          echo "outcome=$OUTCOME errors=$ERRORS warnings=$WARNINGS rules=$RULES"
+          [ "$OUTCOME" = "failure" ] && [ "$ERRORS" = "7" ] && [ "$WARNINGS" = "2" ] && [ "$RULES" = "10" ] || {
+            echo "::error::brand-claim-check did not report the fixture violations as expected"
+            exit 1
+          }
