@@ -50,6 +50,7 @@ If a required check is missing entirely, GitHub treats "did not run" as a blocke
 Every new non-draft PR is reviewed by the Claude PR review workflow (inline comments plus one summary review). Treat it like a human review.
 
 - **Every review thread must be addressed** (Claude's, a human's, or Copilot's if it runs): reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. The `main-protection` ruleset blocks the merge otherwise, and `git-guard.py` refuses `gh pr merge` while a thread is open — replying alone does not resolve.
+- **Draft-first PRs:** a draft is not reviewed automatically. Add the `claude-review` label to review it as a draft (`gh pr edit <N> --add-label claude-review`), resolve the threads, push once, then `gh pr ready`. A labelled PR is not reviewed again when it is marked ready.
 - After opening the PR, **watch for the review autonomously**, resolve threads as they appear, and notify the user when everything is resolved and ready for their final merge call.
 
 ## 5. Hard rules

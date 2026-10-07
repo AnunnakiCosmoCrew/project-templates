@@ -158,6 +158,7 @@ Every new non-draft PR is reviewed by the Claude PR review workflow (`.github/wo
 - **Any thread Claude opens must be addressed**: reply with the fix (or why no change is needed) **and** explicitly resolve the thread. `/resolve-copilot` handles Claude's threads too.
 - The `main-protection` ruleset blocks the merge until every review thread is resolved, and `git-guard.py` refuses `gh pr merge` while one is open.
 - Claude judges the change against this `CLAUDE.md`; keep it current when conventions change.
+- **Draft-first PRs:** a draft is not reviewed automatically. Add the `claude-review` label to review it as a draft (`gh pr edit <N> --add-label claude-review`), resolve the threads, push once, then `gh pr ready`. A labelled PR is not reviewed again when it is marked ready.
 - The review runs once per PR, not per push. To get a fresh review (or one on a PR opened before the workflow existed), add the `claude-review` label. Never add a polling or nudge cron for it.
 <!-- /OPTIONAL -->
 
