@@ -152,7 +152,7 @@ class CliTests(unittest.TestCase):
             rules = os.path.join(tmp, "rules.json")
             with open(rules, "w", encoding="utf-8") as fh:
                 json.dump({"rules": [{"id": "footer", "kind": "required", "pattern": "x", "paths": ["/index.html"], "why": "y"}]}, fh)
-            code, out = run("--rules", rules, "--root", tmp)
+            code, out = run("--rules", rules, "--root", tmp, "--format", "text")
             self.assertEqual(code, 1, out)
             self.assertIn("[footer] required rule matched no file under /index.html", out)
 
@@ -178,7 +178,7 @@ class CliTests(unittest.TestCase):
             rules = os.path.join(tmp, "rules.json")
             with open(rules, "w", encoding="utf-8") as fh:
                 json.dump({"rules": [{"id": "w", "kind": "banned", "pattern": "banned", "paths": ["*.md"], "allow": ["legal name\nspans lines"], "why": "y"}]}, fh)
-            code, out = run("--rules", rules, "--root", tmp)
+            code, out = run("--rules", rules, "--root", tmp, "--format", "text")
             self.assertIn("a.md:3: error: [w]", out)
 
     def test_github_annotations_are_workspace_relative_and_escaped(self):
