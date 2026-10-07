@@ -36,7 +36,8 @@ All required before code:
 - **Status** → `In Progress`
 - **Priority** → ask the user if not obvious from the issue body.
 - **Estimate** → Fibonacci `0, 1, 2, 3, 5, 8, 13`. Bugs are always `0`. The `gh` CLI refuses `--number 0` — use the raw `updateProjectV2ItemFieldValue` GraphQL mutation for bug estimates.
-- **Model & Effort** → the most optimal Claude model + effort for the task.
+- **Model & Effort** → `Model · tier (reason)` per the global CLAUDE.md, e.g. `Sonnet 5.5 · medium (routine endpoint)`.
+- **Dependencies** → an issue with an open native "Blocked by" link is `Blocked`; do not start it. `Dependent` on the board is only a readable mirror of those links.
 
 Use `gh project item-edit` with the field IDs. If you don't have them cached, run `gh project field-list {{PROJECT_BOARD_NUMBER}} --owner {{REPO_OWNER}} --format json` once and reuse.
 

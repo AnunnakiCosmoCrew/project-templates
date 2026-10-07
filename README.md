@@ -24,8 +24,8 @@ Any project that adopts these templates commits to a board with at least these f
 | `Status` | single-select | Backlog → Todo → In Progress → In Review → Done (+ Blocked) |
 | `Priority` | single-select | Urgent / High / Medium / Low |
 | `Estimate` | number | Fibonacci story points (0, 1, 2, 3, 5, 8, 13) |
-| `Model & Effort` | text | Recommended Claude model + effort, e.g., `Sonnet 4.6, medium` |
-| `Dependent` | text | Comma-separated issue numbers this is blocked by, e.g., `#412, #420` |
+| `Model & Effort` | text | `Model · tier (reason)`, e.g., `Sonnet 5.5 · medium (routine endpoint)`; current models Opus 5.5 / Sonnet 5.5 / Haiku 4.5 / Fable 5.1, tiers per the global CLAUDE.md |
+| `Dependent` | text | Readable mirror of the issue's native "Blocked by" links (the source of truth), e.g., `#412, #420` |
 
 GitHub's native `Parent issue` and `Sub-issues progress` fields are also part of the workflow but exist on every project board by default — no setup needed.
 
@@ -166,10 +166,14 @@ curl -sL https://raw.githubusercontent.com/AnunnakiCosmoCrew/project-templates/m
 #    until the repo sets COPILOT_RESOLVE_ENABLED=true and ANTHROPIC_API_KEY (see above).
 /path/to/project-templates/scripts/install-copilot-workflow.sh . "<PR check workflow name>"
 
-# 7. Commit and push.
+# 7. Add the repo's row to emirers/registry.yaml (kind, board, key, branch, worktree,
+#    required_checks) and apply the org-standard main-protection ruleset from it
+#    (emirers/scripts/apply-rulesets.sh). Code and site repos take PRs only; git-guard
+#    refuses a push to main there, so the bootstrap lands as the repo's first PR:
+git checkout -b feature/1-bootstrap
 git add CLAUDE.md .claude/skills .github/workflows/resolve-copilot-comments.yml
 git commit -m "chore: add CLAUDE.md, workflow skills + Copilot-resolve workflow (from project-templates)"
-git push
+git push -u origin feature/1-bootstrap && gh pr create --fill --reviewer @copilot
 ```
 
 ## Maintaining the templates
@@ -184,6 +188,8 @@ When the conventions evolve (new field, new workflow step, etc.):
    - **Copilot workflow**: re-run `./scripts/install-copilot-workflow.sh <repo-dir>` against each adopting repo (pass the PR check workflow name the first time) and open a PR with the result.
 
 ## Adopting projects
+
+The first adopters, kept as history. By 2026-10 about twenty org repos carry the rendered template; the full list with each repo's board, prefixes and required checks is `emirers/registry.yaml` (private).
 
 | Project | CLAUDE.md | Board | Adopted |
 | --- | --- | --- | --- |

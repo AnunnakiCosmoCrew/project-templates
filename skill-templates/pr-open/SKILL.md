@@ -49,12 +49,12 @@ If a required check is missing entirely, GitHub treats "did not run" as a blocke
 
 Every PR is auto-reviewed by GitHub Copilot. Treat it like a human review.
 
-- **Every Copilot thread must be addressed**: reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. `required_conversation_resolution` blocks merge otherwise — replying alone does not resolve.
+- **Every Copilot thread must be addressed**: reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. The `main-protection` ruleset blocks the merge otherwise, and `git-guard.py` refuses `gh pr merge` while a thread is open — replying alone does not resolve.
 - After opening the PR, **watch for the review autonomously**, resolve threads as they appear, and notify the user when everything is resolved and ready for their final merge call.
 
 ## 5. Hard rules
 
-- **Never push directly to main** — even for one-line changes.
-- **Never bypass branch protection** (`--admin`, force-push, skip required checks).
+- **Never push directly to main** — even for one-line changes. The ruleset refuses it server-side and `git-guard.py` refuses it locally.
+- **Never bypass branch protection** (`--admin`, force-push, skip required checks). `git-guard.py` refuses `gh pr merge --admin` and a merge with red, pending or skipped required checks.
 - **Squash merge only.** No merge commits, no rebase merges.
 - **Auto-delete head branches** is on — the remote branch is removed on merge; the local worktree is swept by auto-prune next session (see the `worktree` skill).
