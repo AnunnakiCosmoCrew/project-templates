@@ -1,0 +1,42 @@
+name: Brand and claim check
+description: >-
+  Grep a built site or a source tree against a JSON rules file of banned and required
+  patterns (brand names, attribution lines, addresses, legal claims). Fails on any
+  violation of an "error" rule and prints each offending file:line with the rule's reason.
+author: AnunnakiCosmoCrew
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  rules:
+    description: Path to the rules file (JSON), relative to the workspace.
+    required: false
+    default: brand-rules.json
+  root:
+    description: >-
+      Directory to scan. Overrides the "root" key of the rules file. Leave empty to use
+      the rules file's own "root" (default "." = the directory of the rules file).
+    required: false
+    default: ""
+  python:
+    description: Python interpreter to run the check with (3.8+, standard library only).
+    required: false
+    default: python3
+
+runs:
+  using: composite
+  steps:
+    - name: Brand and claim check
+      shell: bash
+      env:
+        BRAND_CHECK_RULES: ${{ inputs.rules }}
+        BRAND_CHECK_ROOT: ${{ inputs.root }}
+        BRAND_CHECK_PYTHON: ${{ inputs.python }}
+      run: |
+        set -euo pipefail
+        args=(--rules "$BRAND_CHECK_RULES")
+        if [ -n "$BRAND_CHECK_ROOT" ]; then
+          args+=(--root "$BRAND_CHECK_ROOT")
+        fi
+        "$BRAND_CHECK_PYTHON" "${{ github.action_path }}/brand_check.py" "${args[@]}"

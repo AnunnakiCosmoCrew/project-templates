@@ -13,6 +13,7 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | [`scripts/install-global-workflow.sh`](scripts/install-global-workflow.sh) | One-time-per-machine: installs the `/resolve-copilot` command. Everything else it used to install now comes from `emirers/install.sh`. |
 | [`scripts/setup-project-board.sh`](scripts/setup-project-board.sh) | Idempotent script that ensures a GitHub Project (v2) board has the standard fields. |
 | [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
+| [`actions/brand-claim-check/`](actions/brand-claim-check) | Composite GitHub Action + stdlib Python script: greps a built site or a source tree against a per-repo `brand-rules.json` (banned / required patterns, file presence, locale parity) and fails on violations. Its README has the schema and a copy-paste workflow. Unit-tested by `.github/workflows/actions-test.yml`. |
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
 
 ## The contract
