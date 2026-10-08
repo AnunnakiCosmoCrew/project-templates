@@ -75,14 +75,17 @@ jobs:
           # boundary so #12 doesn't match #123. Two forms count as a fix:
           #   - a line starting with the commit-message key `{{ISSUE_KEY_PREFIX}}-N`
           #     (the subject prefix; squash-merge keeps the title, so this is
-          #     the durable one), optionally wrapped as `[KEY-N]` / `(KEY-N)`;
-          #   - a fix keyword followed directly by the reference:
-          #     `Closes|Fixes|Resolves #N` or `... {{ISSUE_KEY_PREFIX}}-N`.
+          #     the durable one), optionally wrapped as `[KEY-N]` / `(KEY-N)`
+          #     and optionally after a conventional-commit prefix such as
+          #     `fix(auth): `;
+          #   - a fix keyword followed by the reference, which may be one of
+          #     several: `Closes|Fixes|Resolves #N`, `... {{ISSUE_KEY_PREFIX}}-N`,
+          #     `Fixes #11, #12`, `Closes #11 and #12`.
           # A bare mention ("see #12", "related to {{ISSUE_KEY_PREFIX}}-12") is not proof of
           # a fix. The left boundary `(?<![\w-])` keeps `foo#12` and
           # `W{{ISSUE_KEY_PREFIX}}-12` from matching. test-install-bug-workflows.sh
           # extracts and exercises this exact line — keep it on one line.
-          pattern="(?:^[\[(]?{{ISSUE_KEY_PREFIX}}-$ISSUE\b|(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:#|{{ISSUE_KEY_PREFIX}}-)$ISSUE\b)"
+          pattern="(?:^(?:\w+(?:\([^)]*\))?!?:\s*)?[\[(]?{{ISSUE_KEY_PREFIX}}-$ISSUE\b|(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:#|{{ISSUE_KEY_PREFIX}}-)\d+\s*(?:,|and|&)\s*)*(?:#|{{ISSUE_KEY_PREFIX}}-)$ISSUE\b)"
           # tformat (not format) so a single match ends in a newline and wc -l
           # counts 1 rather than 0.
           commits=$(git log --since="$reopened_at" --perl-regexp --regexp-ignore-case --grep="$pattern" --pretty=tformat:%H origin/main | wc -l)
