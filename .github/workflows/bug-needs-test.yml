@@ -1,0 +1,148 @@
+name: Bug test coverage
+
+# The `Bug PRs must add test lines` job below is meant to be a required
+# status check on the repo's default branch. Trigger shape:
+#
+# - `pull_request: main` fires on PR open AND on every new commit pushed to
+#   the PR's branch.
+#
+# No path filter: a workflow-level filter that stops the workflow from
+# starting leaves the required check "did not run" and blocks merge. The
+# workflow therefore always starts, and the job below skips itself (job-level
+# `if:`) on PRs the gate does not concern. A job skipped by its `if:` reports
+# as skipped, which satisfies a required check, and starts no runner, so a
+# non-bug PR costs no billed minute.
+#
+# INSTALL: scripts/install-bug-workflows.sh <repo-dir> <issue-key-prefix> <bug-label>
+#   bug — the label this repo uses for bug issues/PRs, substituted
+#   at install time (same {{PLACEHOLDER}} approach as bug-close-audit.yml).
+#   The `no-test-required` escape label is NOT parameterized — keep it
+#   exactly as WordPower has it in every repo.
+#
+# TEST PATHS: the globs below are ecosystem-generic (JVM, Dart/Flutter,
+# JS/TS, Python test-directory and test-file conventions), replacing
+# WordPower's Flutter/Gradle-specific paths. They use `:(glob)` pathspec
+# magic throughout — a plain pathspec needs a literal `/` before `test`,
+# so without it `**/test/**` never matches a top-level test/ directory.
+# If this repo's tests live somewhere these don't match, add its path(s)
+# (also `:(glob)`-prefixed) to the `--` list below.
+#
+# Canonical source: WordPower-app/.github/workflows/bug-needs-test.yml.
+
+on:
+  # `ready_for_review` starts the jobs a draft skipped — not one of the
+  # default activity types, hence the explicit list.
+  pull_request:
+    branches: [main]
+    # Include label activity so adding/removing the bug or no-test-required
+    # label after PR open re-runs the gate rather than leaving a stale green
+    # result. The job's `if:` drops every other label event.
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Deliberately NOT cancel-in-progress. This workflow listens for `labeled` /
+# `unlabeled` precisely so a label applied after PR open re-runs the gate —
+# but with cancellation on, that second run kills the first, and the
+# cancelled run lands as a CANCELLED row on a REQUIRED check. A cancelled
+# required check counts as failed and blocks merge, the same trap a bare
+# `cancel-in-progress: true` falls into on any check that reacts to label
+# events (e.g. Dependabot labeling a PR a second after opening it). The job
+# is a few seconds of pure shell, so there is nothing worth cancelling.
+# Runs for unrelated labels (which the job skips) use a separate `noise`
+# group: GitHub replaces a PENDING run when a newer one queues in the same
+# group, so a skipped run sharing the group could displace a pending
+# `labeled` run that has to enforce the gate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["bug","no-test-required"]'), github.event.label.name)) && 'noise' || 'gate' }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # An unrelated-label run is skipped. Under a different name, its skipped
+    # check run cannot sit on top of a red "Bug PRs must add test lines" on
+    # the same commit and read as green to the required-check rule.
+    name: ${{ (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["bug","no-test-required"]'), github.event.label.name)) && 'Bug test gate (unrelated label, skipped)' || 'Bug PRs must add test lines' }}
+    # A skipped job starts no runner and is not billed. It is skipped:
+    #  - while the PR is a draft, so the job runs once, on the head that
+    #    will be merged, after the review is resolved;
+    #  - on a `labeled` / `unlabeled` event for any label but the two the
+    #    gate reads (adding `claude-review` must not start a runner);
+    #  - on any other event unless the payload labels include bug
+    #    and not `no-test-required`.
+    # The payload is only a cheap pre-filter. A stale payload cannot leave
+    # the check wrong: every change to either label fires its own `labeled`
+    # / `unlabeled` run, and the step below reads the authoritative labels
+    # from the API before it enforces anything.
+    if: >-
+      ${{ github.event_name != 'pull_request' || (
+        !github.event.pull_request.draft
+        && (
+          (contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+            && contains(fromJSON('["bug","no-test-required"]'), github.event.label.name))
+          || (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+            && contains(github.event.pull_request.labels.*.name, 'bug')
+            && !contains(github.event.pull_request.labels.*.name, 'no-test-required'))
+        )
+      ) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for test lines in bug PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Fetch labels from the API — not from the event payload, because
+          # label changes after PR open (e.g. adding no-test-required) are
+          # not reflected in the synchronize event's payload.
+          LABELS=$(gh api "repos/$REPO/pulls/$PR_NUMBER" \
+            --jq '[.labels[].name] | @csv')
+          echo "PR labels: $LABELS"
+
+          if echo "$LABELS" | grep -q '"no-test-required"'; then
+            echo "::notice::no-test-required label present — skipping test-line check."
+            exit 0
+          fi
+
+          if ! echo "$LABELS" | grep -q '"bug"'; then
+            echo "::notice::PR is not labelled bug — nothing to enforce."
+            exit 0
+          fi
+
+          echo "PR is labelled bug. Counting added lines in test directories..."
+
+          # :(glob) magic is required for `**/` to match zero directories —
+          # a plain pathspec needs a literal `/` before `test`, so without it
+          # **/test/** never matches a top-level test/ (Flutter, JS/TS,
+          # Python all put tests there), silently counting 0 added lines.
+          ADDED=$(git diff origin/main..HEAD --numstat \
+            -- \
+            ':(glob)**/test/**' \
+            ':(glob)**/tests/**' \
+            ':(glob)**/testing/**' \
+            ':(glob)**/integration_test/**' \
+            ':(glob)**/*.test.*' \
+            ':(glob)**/*.spec.*' \
+            ':(glob)**/*_test.*' \
+            ':(glob)**/*Test.*' \
+            ':(glob)**/test_*.*' \
+            | awk '{ sum += $1 } END { print sum+0 }')
+
+          echo "Added test lines: $ADDED"
+
+          if [ "$ADDED" -lt 1 ]; then
+            echo "::error::Bug PR has no added test lines. Add a test that exercises the bug, or apply the 'no-test-required' label with an explanation comment for trivial cases."
+            exit 1
+          fi
+
+          echo "Bug PR added $ADDED test lines. ✓"
