@@ -156,8 +156,10 @@ parameterized here so every code repo can install its own copy:
   check, "Bug PRs must add test lines": blocks merge of a bug-labelled PR
   that adds no lines under common test paths/conventions, unless the PR
   carries `no-test-required` (leave a comment explaining why when you apply
-  it). Event-triggered (`pull_request`), always runs so a required check
-  that silently never runs can't block merge by omission.
+  it). Event-triggered (`pull_request`); the workflow always starts so a
+  required check can't block merge by omission, but the job skips itself
+  (no runner, no billed minute) unless the PR carries the bug label and not
+  `no-test-required`, and ignores label events for any other label.
 
 Both carry `{{ISSUE_KEY_PREFIX}}` / `{{BUG_LABEL}}` placeholders, substituted
 at install time:
@@ -248,6 +250,7 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 
 ## Version history
 
+- **2026-10-08** — `bug-needs-test.yml` skips its job (job-level `if:`) on non-bug PRs and on `labeled` / `unlabeled` events for unrelated labels, so they no longer start a billed runner ([#32](https://github.com/AnunnakiCosmoCrew/project-templates/issues/32)). Re-run `install-bug-workflows.sh` in each consumer to pick it up.
 - **2026-10-07** — Added `bug-close-audit.yml` and `bug-needs-test.yml` as canonical workflows (W8, [#27](https://github.com/AnunnakiCosmoCrew/project-templates/issues/27)), ported from `WordPower-app` — the only repo enforcing "a linked PR is not proof of a fix" and "red reproducer before green fix" in CI, despite both rules being stated in ten `CLAUDE.md` files. `bug-needs-test.yml`'s Flutter/Gradle test paths became ecosystem-generic globs; both workflows' bug-label and issue-key-prefix are now `{{BUG_LABEL}}` / `{{ISSUE_KEY_PREFIX}}` placeholders, substituted by the new `install-bug-workflows.sh`, same approach as `{{PR_CHECK_WORKFLOW}}`. Added `scripts/test-install-bug-workflows.sh` and a new `actions-test.yml` CI workflow to run it (no `actionlint` yet — not previously used in this repo).
 - **2026-10-07** — Brought the templates in line with how the org works now. The contract names the real barriers: the `main-protection` ruleset (PR required, threads resolved, linear history, required checks) and the `git-guard.py` hook from `emirers`, installed through managed settings. Native "Blocked by" links are the source of truth for dependencies, `Dependent` is only a readable mirror (`#N` same-repo, `owner/repo#N` cross-repo), and `issue-start` now looks the blockers up before it touches the board and stops on an open one. `Model & Effort` uses the `Model · tier (reason)` format with current models. `pr-open` documents the merge safeguards. The fresh-repo bootstrap seeds `main` (`--add-readme`), clones, and opens the bootstrap PR from a branch that follows the repo's own prefix and issue-number convention. The `setup-project-board.sh` header was updated to match. Raised by Copilot review on #14.
 - **2026-10-06** — The machine-global layer moved to the private `emirers` repo (luvita-docs ADR 0003): `global/scripts/prune-*.sh` and `global/skills/worktree` are removed from here because the installed copies had moved on (merged-PR proof, harness worktree grace) and re-running the installer would have downgraded them; `install-global-workflow.sh` now installs only `/resolve-copilot`. This repo is public, and the fleet scripts know the portfolio.

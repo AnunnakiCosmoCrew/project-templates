@@ -37,6 +37,28 @@ for f in "$close_audit" "$needs_test"; do
     || fail "$f is not valid YAML after substitution"
 done
 
+# --- the job-level gate: non-bug PRs and unrelated label events must skip ----
+# The `if:` is what keeps a non-bug PR from starting a billed runner (#32).
+# Assert the substituted label appears in both the payload check and the
+# label-event filter, and that the no-test-required escape is part of both.
+gate="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).dig("jobs","check","if")' "$needs_test")"
+case "$gate" in
+  *"contains(github.event.pull_request.labels.*.name, 'bug')"*) ;;
+  *) fail "job if: does not gate on the PR carrying the bug label";;
+esac
+case "$gate" in
+  *"!contains(github.event.pull_request.labels.*.name, 'no-test-required')"*) ;;
+  *) fail "job if: does not skip when no-test-required is present";;
+esac
+case "$gate" in
+  *'["bug","no-test-required"]'*"github.event.label.name"*) ;;
+  *) fail "job if: does not restrict labeled/unlabeled events to bug and no-test-required";;
+esac
+case "$gate" in
+  *"pull_request.draft"*) ;;
+  *) fail "job if: lost the draft skip";;
+esac
+
 # --- functional: the installed test-path globs actually match ------------
 # Extract the real pathspec list from the installed file (not a hand-copied
 # duplicate that could drift) and exercise it against a scratch git repo
