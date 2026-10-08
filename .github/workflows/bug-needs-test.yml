@@ -61,10 +61,7 @@ concurrency:
 
 jobs:
   check:
-    # An unrelated-label run is skipped. Under a different name, its skipped
-    # check run cannot sit on top of a red "Bug PRs must add test lines" on
-    # the same commit and read as green to the required-check rule.
-    name: ${{ (contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && !contains(fromJSON('["bug","no-test-required"]'), github.event.label.name)) && 'Bug test gate (unrelated label, skipped)' || 'Bug PRs must add test lines' }}
+    name: Bug PRs must add test lines
     # A skipped job starts no runner and is not billed. It is skipped:
     #  - while the PR is a draft, so the job runs once, on the head that
     #    will be merged, after the review is resolved;
