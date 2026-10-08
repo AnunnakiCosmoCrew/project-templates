@@ -78,8 +78,9 @@ jobs:
           #     the durable one), optionally wrapped as `[KEY-N]` / `(KEY-N)`
           #     and optionally after a conventional-commit prefix such as
           #     `fix(auth): `;
-          #   - the key closing a line: `handle x (KEY-N)`, `[KEY-N]`, with an
-          #     optional trailing squash-merge PR number `(#45)`;
+          #   - the key closing a conventional-commit subject:
+          #     `fix(auth): handle x (KEY-N)`, with an optional trailing
+          #     squash-merge PR number `(#45)`;
           #   - a fix keyword followed by the reference, which may be one of
           #     several, in any of these spellings: `#N`, `{{ISSUE_KEY_PREFIX}}-N`,
           #     `$REPO#N`, or a full issue URL of this repo. Lists may be
@@ -94,8 +95,8 @@ jobs:
           # reopening. The pattern is covered by
           # project-templates/scripts/test-install-bug-workflows.sh, which
           # extracts the `ref=` and `pattern=` lines below — keep each on one line.
-          ref="(?:#|{{ISSUE_KEY_PREFIX}}-|$REPO#|https://github\.com/$REPO/issues/)"
-          pattern="(?:^(?:\w+(?:\([^)]*\))?!?:\s*)?[\[(]?{{ISSUE_KEY_PREFIX}}-$ISSUE\b|[\[(]{{ISSUE_KEY_PREFIX}}-$ISSUE[\])](?:\s*\(#\d+\))?\s*\$|(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:$ref\d+[\s,&]+(?:and\s+)?)*$ref$ISSUE\b)"
+          ref="(?:#|{{ISSUE_KEY_PREFIX}}-|${REPO//./\\.}#|https://github\.com/${REPO//./\\.}/issues/)"
+          pattern="(?:^(?:\w+(?:\([^)]*\))?!?:\s*)?[\[(]?{{ISSUE_KEY_PREFIX}}-$ISSUE\b|^\w+(?:\([^)]*\))?!?:.*[\[(]{{ISSUE_KEY_PREFIX}}-$ISSUE[\])](?:\s*\(#\d+\))?\s*\$|(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:$ref\d+[\s,&]+(?:and\s+)?)*$ref$ISSUE\b)"
           # tformat (not format) so a single match ends in a newline and wc -l
           # counts 1 rather than 0.
           commits=$(git log --since="$reopened_at" --perl-regexp --regexp-ignore-case --grep="$pattern" --pretty=tformat:%H origin/main | wc -l)

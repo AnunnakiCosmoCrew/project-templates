@@ -95,7 +95,7 @@ commit_msg() {   # $1 = full commit message
 matches() {      # $1 = issue number, $2 = commit message; prints match count
   git -C "$audit_repo" reset -q --hard "$base"
   commit_msg "$2"
-  ( ISSUE="$1"; REPO="AnunnakiCosmoCrew/Pelerin"; eval "$pattern_line"
+  ( ISSUE="$1"; REPO="${3:-AnunnakiCosmoCrew/Pelerin}"; eval "$pattern_line"
     git -C "$audit_repo" log --perl-regexp --regexp-ignore-case --grep="$pattern" \
       --pretty=tformat:%H "$base"..HEAD | wc -l | tr -d ' ' )
 }
@@ -115,13 +115,17 @@ base="$(git -C "$audit_repo" rev-parse HEAD)"
 [ "$(matches 12 'Closes #11 and #12')" -eq 1 ]           || fail "Closes #11 and #12 did not credit #12"
 [ "$(matches 12 'Fixes PEL-3, PEL-7 & PEL-12')" -eq 1 ]  || fail "keyed list did not credit PEL-12"
 [ "$(matches 12 'fix(auth): handle token reuse (PEL-12)')" -eq 1 ] || fail "key closing the subject not matched"
-[ "$(matches 12 'handle token reuse (PEL-12) (#45)')" -eq 1 ]      || fail "key before a squash PR number not matched"
+[ "$(matches 12 'fix: handle token reuse (PEL-12) (#45)')" -eq 1 ]      || fail "key before a squash PR number not matched"
 [ "$(matches 12 'Fixes #11, and #12')" -eq 1 ]           || fail "Fixes #11, and #12 did not credit #12"
 [ "$(matches 12 'Closes #11, #13 and #12')" -eq 1 ]      || fail "three-item list did not credit #12"
 [ "$(matches 12 'Fixes #11 #12')" -eq 1 ]                || fail "space-separated list did not credit #12"
 [ "$(matches 12 'Closes AnunnakiCosmoCrew/Pelerin#12')" -eq 1 ] || fail "owner/repo#12 not matched"
 [ "$(matches 12 'Closes https://github.com/AnunnakiCosmoCrew/Pelerin/issues/12')" -eq 1 ] || fail "issue URL not matched"
 # false positives
+[ "$(matches 12 'see the discussion in (PEL-12)')" -eq 0 ] || fail "bare (PEL-12) mention wrongly credited"
+[ "$(matches 12 'follow-up to [PEL-12]')" -eq 0 ]        || fail "bare [PEL-12] mention wrongly credited"
+[ "$(matches 12 'Closes o/aXb#12' o/a.b)" -eq 0 ]        || fail "'.' in REPO not escaped"
+[ "$(matches 12 'Closes o/a.b#12' o/a.b)" -eq 1 ]        || fail "dotted REPO form not matched"
 [ "$(matches 12 'Closes AnunnakiCosmoCrew/Other#12')" -eq 0 ] || fail "another repo's #12 wrongly credited"
 [ "$(matches 12 'Closes https://github.com/AnunnakiCosmoCrew/Other/issues/12')" -eq 0 ] || fail "another repo's issue URL wrongly credited"
 [ "$(matches 12 'Fixes #11 but not unrelated #12')" -eq 0 ] || fail "keyword followed by prose wrongly credited #12"
