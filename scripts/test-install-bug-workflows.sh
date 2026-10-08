@@ -74,6 +74,59 @@ case_added() {   # $1 = relative path to add one line under
 [ "$(case_added src/test/java/x/FooTest.java)" -gt 0 ] || fail "nested src/test/java/ not matched by the installed globs"
 [ "$(case_added lib/foo.dart)" -eq 0 ] || fail "non-test file incorrectly counted as a test line"
 
+# --- functional: the installed issue-reference pattern ----------------------
+# Extract the real `pattern=` line from the installed file and run it through
+# the same `git log --perl-regexp --grep` call the workflow uses, against
+# commit messages covering true positives and the false positives raised on
+# handlebars-web#133 (no left boundary; any passing mention counted).
+pattern_line="$(grep -E '^[[:space:]]+pattern="' "$close_audit" | sed 's/^[[:space:]]*//')"
+[ -n "$pattern_line" ] || fail "could not extract pattern= line from bug-close-audit.yml"
+[ "$(printf '%s\n' "$pattern_line" | wc -l)" -eq 1 ] || fail "pattern= must be a single line"
+
+audit_repo="$tmp/audit-repo"
+mkdir -p "$audit_repo"
+git -C "$audit_repo" init -q -b main
+git -C "$audit_repo" config user.email test@example.com
+git -C "$audit_repo" config user.name test
+n=0
+commit_msg() {   # $1 = full commit message
+  n=$((n + 1))
+  git -C "$audit_repo" -c commit.gpgsign=false commit -q --allow-empty -m "$1"
+}
+matches() {      # $1 = issue number, $2 = commit message; prints match count
+  git -C "$audit_repo" reset -q --hard "$base"
+  commit_msg "$2"
+  ( ISSUE="$1"; eval "$pattern_line"
+    git -C "$audit_repo" log --perl-regexp --regexp-ignore-case --grep="$pattern" \
+      --pretty=tformat:%H "$base"..HEAD | wc -l | tr -d ' ' )
+}
+commit_msg base
+base="$(git -C "$audit_repo" rev-parse HEAD)"
+
+# true positives
+[ "$(matches 12 'PEL-12: fix login')" -eq 1 ]            || fail "subject prefix PEL-12 not matched"
+[ "$(matches 12 '[PEL-12] fix login')" -eq 1 ]           || fail "bracketed [PEL-12] not matched"
+[ "$(matches 12 $'Fix login\n\nCloses #12')" -eq 1 ]     || fail "Closes #12 not matched"
+[ "$(matches 12 'Fixes #12')" -eq 1 ]                    || fail "Fixes #12 not matched"
+[ "$(matches 12 'resolved: PEL-12')" -eq 1 ]             || fail "resolved: PEL-12 not matched"
+[ "$(matches 12 $'Tidy\n\nPEL-12 follow-up')" -eq 1 ]    || fail "body line starting with PEL-12 not matched"
+[ "$(matches 12 'fix(auth): PEL-12 stop token reuse')" -eq 1 ] || fail "conventional-commit prefix before PEL-12 not matched"
+[ "$(matches 12 'feat: [PEL-12] add export')" -eq 1 ]    || fail "feat: [PEL-12] not matched"
+[ "$(matches 12 'Fixes #11, #12')" -eq 1 ]               || fail "Fixes #11, #12 did not credit #12"
+[ "$(matches 12 'Closes #11 and #12')" -eq 1 ]           || fail "Closes #11 and #12 did not credit #12"
+[ "$(matches 12 'Fixes PEL-3, PEL-7 & PEL-12')" -eq 1 ]  || fail "keyed list did not credit PEL-12"
+# false positives
+[ "$(matches 12 'Fixes #11, #123')" -eq 0 ]              || fail "#123 in a list wrongly credited #12"
+[ "$(matches 12 'chore: bump deps, see PEL-12')" -eq 0 ] || fail "conventional prefix + passing mention wrongly counted"
+[ "$(matches 12 'WPEL-12: fix login')" -eq 0 ]           || fail "WPEL-12 wrongly matched PEL-12"
+[ "$(matches 12 'Fixes WPEL-12')" -eq 0 ]                || fail "Fixes WPEL-12 wrongly matched PEL-12"
+[ "$(matches 12 'Fixes foo#12')" -eq 0 ]                 || fail "Fixes foo#12 wrongly matched #12"
+[ "$(matches 12 'Update docs, see #12')" -eq 0 ]         || fail "passing mention of #12 wrongly counted as a fix"
+[ "$(matches 12 'Related to PEL-12')" -eq 0 ]            || fail "passing mention of PEL-12 wrongly counted as a fix"
+[ "$(matches 12 'Closes #123')" -eq 0 ]                  || fail "#123 wrongly matched #12"
+[ "$(matches 12 'PEL-123: other work')" -eq 0 ]          || fail "PEL-123 wrongly matched PEL-12"
+[ "$(matches 12 'prefixes #12 in output')" -eq 0 ]       || fail "'prefixes #12' wrongly counted as a fix keyword"
+
 # --- idempotent re-run ---------------------------------------------------
 "$installer" "$tmp" PEL bug >/dev/null
 grep -q "PEL-" "$close_audit" || fail "re-run broke the substitution"

@@ -13,9 +13,10 @@ name: Bug close audit
 # install-copilot-workflow.sh uses for {{PR_CHECK_WORKFLOW}}):
 #   {{ISSUE_KEY_PREFIX}} — this repo's commit-prefix convention
 #     (emirers/registry.yaml `key`, e.g. PEL, HB, MER, LUV, DVN). A commit is
-#     credited to an issue when its message contains `#<N>` or
-#     `<PREFIX>-<N>` — squash-merge keeps the title only, so the body's
-#     `Closes #N` is often dropped and the prefixed key is the durable one.
+#     credited to an issue when a line starts with `<PREFIX>-<N>` or the
+#     message says `Closes|Fixes|Resolves #<N>` / `<PREFIX>-<N>` — squash-merge
+#     keeps the title only, so the body's `Closes #N` is often dropped and the
+#     prefixed key is the durable one. A passing mention does not count.
 #   {{BUG_LABEL}} — the label this repo uses for bug issues. Check with
 #     `gh label list --repo <owner>/<repo>`; create it if missing:
 #     `gh label create <label> --repo <owner>/<repo>`.
@@ -68,13 +69,26 @@ jobs:
             echo "Last reopen older than 7d — nothing to audit."
             exit 0
           fi
-          # Any commit on main mentioning this issue since the reopen?
+          # Any commit on main that credibly fixes this issue since the reopen?
           # Use full timestamp (not just date) to avoid counting commits from
           # earlier the same day. --perl-regexp enables \b as a proper word
-          # boundary so #12 doesn't match #123. Accept either `#N` (PR body's
-          # `Closes #N`) or `{{ISSUE_KEY_PREFIX}}-N` (the commit-message
-          # convention).
-          commits=$(git log --since="$reopened_at" --perl-regexp --grep="(?:#|{{ISSUE_KEY_PREFIX}}-)$ISSUE\b" --pretty=format:%H origin/main | wc -l)
+          # boundary so #12 doesn't match #123. Two forms count as a fix:
+          #   - a line starting with the commit-message key `{{ISSUE_KEY_PREFIX}}-N`
+          #     (the subject prefix; squash-merge keeps the title, so this is
+          #     the durable one), optionally wrapped as `[KEY-N]` / `(KEY-N)`
+          #     and optionally after a conventional-commit prefix such as
+          #     `fix(auth): `;
+          #   - a fix keyword followed by the reference, which may be one of
+          #     several: `Closes|Fixes|Resolves #N`, `... {{ISSUE_KEY_PREFIX}}-N`,
+          #     `Fixes #11, #12`, `Closes #11 and #12`.
+          # A bare mention ("see #12", "related to {{ISSUE_KEY_PREFIX}}-12") is not proof of
+          # a fix. The left boundary `(?<![\w-])` keeps `foo#12` and
+          # `W{{ISSUE_KEY_PREFIX}}-12` from matching. test-install-bug-workflows.sh
+          # extracts and exercises this exact line — keep it on one line.
+          pattern="(?:^(?:\w+(?:\([^)]*\))?!?:\s*)?[\[(]?{{ISSUE_KEY_PREFIX}}-$ISSUE\b|(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:#|{{ISSUE_KEY_PREFIX}}-)\d+\s*(?:,|and|&)\s*)*(?:#|{{ISSUE_KEY_PREFIX}}-)$ISSUE\b)"
+          # tformat (not format) so a single match ends in a newline and wc -l
+          # counts 1 rather than 0.
+          commits=$(git log --since="$reopened_at" --perl-regexp --regexp-ignore-case --grep="$pattern" --pretty=tformat:%H origin/main | wc -l)
           if [ "$commits" -gt 0 ]; then
             echo "$commits commit(s) reference #$ISSUE on main since reopen — close looks legitimate."
             exit 0
