@@ -6,9 +6,12 @@ name: Bug test coverage
 # - `pull_request: main` fires on PR open AND on every new commit pushed to
 #   the PR's branch.
 #
-# No path filter: required checks that don't run are treated as "did not run"
-# and block merge. Always firing keeps the required check honest; the gate is
-# pure shell (a few seconds for a no-op non-bug PR).
+# No path filter: a workflow-level filter that stops the workflow from
+# starting leaves the required check "did not run" and blocks merge. The
+# workflow therefore always starts, and the job below skips itself (job-level
+# `if:`) on PRs the gate does not concern. A job skipped by its `if:` reports
+# as skipped, which satisfies a required check, and starts no runner, so a
+# non-bug PR costs no billed minute.
 #
 # INSTALL: scripts/install-bug-workflows.sh <repo-dir> <issue-key-prefix> <bug-label>
 #   {{BUG_LABEL}} — the label this repo uses for bug issues/PRs, substituted
@@ -33,7 +36,7 @@ on:
     branches: [main]
     # Include label activity so adding/removing the bug or no-test-required
     # label after PR open re-runs the gate rather than leaving a stale green
-    # result.
+    # result. The job's `if:` drops these events on PRs that are not bug PRs.
     types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 permissions:
@@ -55,10 +58,31 @@ concurrency:
 jobs:
   check:
     name: Bug PRs must add test lines
-    # Skipped while the PR is a draft, so the job runs once, on the head
-    # that will be merged, after the review is resolved. A skipped job
-    # starts no runner and is not billed.
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    # A skipped job starts no runner and is not billed. It is skipped:
+    #  - while the PR is a draft, so the job runs once, on the head that
+    #    will be merged, after the review is resolved;
+    #  - when the PR is not labelled {{BUG_LABEL}}, unless this event is the
+    #    {{BUG_LABEL}} label itself being added or removed. A non-bug PR has
+    #    nothing to enforce, so its `labeled` runs for other labels
+    #    (`claude-review`, ...) start no runner.
+    # A bug PR is never skipped, not even on an unrelated label event, and
+    # that is deliberate. A skipped job still writes a check run under the
+    # same name, and the newest run of a name is the one a required check
+    # reads: skipping an unrelated label on a bug PR would paper a red
+    # "Bug PRs must add test lines" over with a skipped one (seen on a
+    # scratch PR, project-templates#35). A bug PR therefore pays the
+    # few-second run on every event; a non-bug PR pays none.
+    # The payload is only a pre-filter: the step below reads the
+    # authoritative labels from the API before it enforces anything.
+    if: >-
+      ${{ github.event_name != 'pull_request' || (
+        !github.event.pull_request.draft
+        && (
+          contains(github.event.pull_request.labels.*.name, '{{BUG_LABEL}}')
+          || (contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+            && github.event.label.name == '{{BUG_LABEL}}')
+        )
+      ) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

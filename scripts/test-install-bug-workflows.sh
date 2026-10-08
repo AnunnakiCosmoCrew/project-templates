@@ -37,6 +37,33 @@ for f in "$close_audit" "$needs_test"; do
     || fail "$f is not valid YAML after substitution"
 done
 
+# --- the job-level gate: non-bug PRs must skip, bug PRs must never skip -----
+# The `if:` is what keeps a non-bug PR from starting a billed runner (#32).
+# It must NOT skip a bug PR on an unrelated label event: the skipped run
+# would sit on top of a red "Bug PRs must add test lines" under the same
+# name and read as green to the required-check rule (seen on a scratch PR).
+gate="$(ruby -ryaml -e 'puts YAML.load_file(ARGV[0]).dig("jobs","check","if")' "$needs_test")"
+case "$gate" in
+  *"contains(github.event.pull_request.labels.*.name, 'bug')"*) ;;
+  *) fail "job if: does not run when the PR carries the bug label";;
+esac
+case "$gate" in
+  *"github.event.label.name == 'bug'"*) ;;
+  *) fail "job if: does not run when the bug label itself is added or removed";;
+esac
+case "$gate" in
+  *"pull_request.draft"*) ;;
+  *) fail "job if: lost the draft skip";;
+esac
+case "$gate" in
+  *no-test-required*) fail "job if: must not skip on no-test-required (a skipped run can mask a red one)";;
+esac
+# One concurrency group per branch: a separate group for skipped runs is not
+# needed, because a bug PR's newest run always runs the gate.
+if grep -q "noise" "$needs_test"; then
+  fail "concurrency group still splits unrelated-label runs"
+fi
+
 # --- functional: the installed test-path globs actually match ------------
 # Extract the real pathspec list from the installed file (not a hand-copied
 # duplicate that could drift) and exercise it against a scratch git repo
