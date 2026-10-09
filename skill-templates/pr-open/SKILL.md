@@ -7,6 +7,8 @@ description: Open a pull request for a {{PROJECT_NAME}} feature branch, then wat
   Scaffolded into a repo by project-templates/scripts/install-workflow.sh, which fills
   the placeholder values. After install, complete the FILL note in section 3 with this
   repo's actual required-check names.
+  Section 4a is the risk-tiered founder review policy, luvita-docs ADR 0004
+  (adr/0004-risk-tiered-founder-review.md). Keep its tier keys in step with that ADR.
 -->
 
 # Opening a {{PROJECT_NAME}} PR
@@ -32,7 +34,7 @@ Required body elements:
 - Summary: 1–3 bullets on *why*, not *what*.
 - Test plan: bulleted checklist.
 - For `bug` PRs: proof-of-fix (screenshot / curl / log output).
-- `Founder check:` line (see section 4a): `Founder check: none`, or `Founder check: <tier>: <what the founder should verify>`.
+- `Founder check:` line (see section 4a): `Founder check: none`, or `Founder check: <tier>: <what the founder should verify>`, where `<tier>` is one of `irreversible`, `money`, `public`, `security`, `product`.
 
 ## 3. Required status checks
 
@@ -52,21 +54,25 @@ Every new non-draft PR is reviewed by the Claude PR review workflow (inline comm
 
 - **Every review thread must be addressed** (Claude's, a human's, or Copilot's if it runs): reply with the fix (or justification), then explicitly resolve the thread via the GitHub UI or the `resolveReviewThread` GraphQL mutation. The `main-protection` ruleset blocks the merge otherwise, and `git-guard.py` refuses `gh pr merge` while a thread is open — replying alone does not resolve.
 - **Draft-first PRs:** a draft is not reviewed automatically. Add the `claude-review` label to review it as a draft (`gh pr edit <N> --add-label claude-review`), resolve the threads, push once, then `gh pr ready`. A labelled PR is not reviewed again when it is marked ready.
-- After opening the PR, **watch for the review autonomously**, resolve threads as they appear, and notify the user when everything is resolved and ready for their final merge call.
+- After opening the PR, **watch for the review autonomously**, resolve threads as they appear, and notify the user when everything is resolved and ready to merge. Agents never merge; the merge is the user's. A PR that is not founder-tier (section 4a) needs no review from them, only the merge. For a founder-tier PR, put the `Founder check:` line in the hand-over so they know what to look at before merging.
 
 ## 4a. Founder review is risk-tiered
 
-The founder's review is for founder-tier PRs only (luvita-docs ADR 0004). Everything else merges on green required checks, resolved threads and the Claude review.
+The founder's review is for founder-tier PRs only. Everything else is merged on green required checks, resolved threads and the Claude review, with no founder review.
 
-A PR is founder-tier when it touches:
+A PR is founder-tier when it touches any of these (the key goes on the `Founder check:` line):
 
-- **Irreversible ops:** production deploys or release tags, data migrations, deleting infrastructure.
-- **Money:** billing, Actions minutes (new or heavier workflows, schedules, macOS runners), cloud resources.
-- **Public-facing content:** site copy, brand or product claims, App Store / Play metadata, legally sensitive claims.
-- **Security and access:** `.github/workflows/`, secrets, auth, permissions, rulesets, `CODEOWNERS`, Claude Code settings.
-- **Product or UX decisions** the issue did not specify and the agent made on its own.
+- `irreversible`: production deploys or release tags, data migrations, deleting infrastructure.
+- `money`: billing, Actions minutes (new or heavier workflows, schedules, macOS runners), cloud resources.
+- `public`: site copy, brand or product claims, App Store / Play metadata, legally sensitive claims.
+- `security`: `.github/workflows/`, secrets, auth, permissions, rulesets, `CODEOWNERS`, Claude Code settings.
+- `product`: a product or UX decision the issue did not specify and the agent made on its own.
 
-When in doubt, it is founder-tier. Say which tier and what to verify on the `Founder check:` line. Never add the founder as a reviewer by hand. A local session acts as the founder's login, and GitHub refuses a review request to the PR's author. EmirErs requests the review on founder-tier cloud PRs. A local session names a founder-tier PR as such when it hands over.
+When in doubt, it is founder-tier. Example: `Founder check: public: the pricing sentence in the hero matches the price list`.
+
+Never add the founder as a reviewer by hand:
+- **Local session** (you act as the founder's GitHub login): GitHub refuses a review request to the PR's author, and the founder is in the session. Put the `Founder check:` line in your hand-over message instead.
+- **Cloud run** (the agents' machine user): the cloud agent runner requests the founder's review itself once the PR is ready, and only when the line names a tier, is missing, or the PR changes a structural founder-tier path such as `.github/` or migrations.
 
 ## 5. Hard rules
 
