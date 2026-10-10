@@ -63,6 +63,12 @@ jobs:
       startsWith(github.event.comment.body, '/go')
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    # Two /go comments close together must not both fire: the second waits, then finds the first's
+    # 🚀 and reacts 👀. The stub serializes on its own group too; this one has a different name,
+    # because a called job sharing its caller's group would wait for the caller and never start.
+    concurrency:
+      group: emirers-go-fire-${{ github.repository }}-${{ github.event.issue.number }}
+      cancel-in-progress: false
     steps:
       - name: Fire the routine
         env:

@@ -114,6 +114,11 @@ class ReusableWorkflow(unittest.TestCase):
         for run in RUNS:
             self.assertNotIn("head -n", run)
 
+    def test_fire_serializes_per_issue_under_its_own_group(self):
+        """Not the stub's group name: a called job in its caller's group would wait for the caller forever."""
+        self.assertIn("    concurrency:\n      group: emirers-go-fire-${{ github.repository }}-${{ github.event.issue.number }}\n"
+                      "      cancel-in-progress: false\n", FIRE)
+
     def test_least_privilege(self):
         self.assertIn("permissions:\n  contents: read\n  issues: write\n  pull-requests: read\n", TEMPLATE)
         self.assertEqual(TEMPLATE.count("secrets."), 1)
