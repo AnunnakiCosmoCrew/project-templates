@@ -3,11 +3,10 @@ name: Actions tests
 # Unit tests for the composite actions in actions/. Standard library only; runs in seconds.
 # PR-triggered so a change to a shared check is verified before any consumer picks it up.
 
+# Runs on every PR (it takes seconds) so it can be a required check: the EmirErs /go reusable
+# workflow is called @main by every routine repo, so nothing reaches main here untested.
 on:
   pull_request:
-    paths:
-      - "actions/**"
-      - ".github/workflows/actions-test.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +25,11 @@ jobs:
 
       - name: Unit tests (brand-claim-check)
         run: python3 -m unittest discover -s actions/brand-claim-check/tests -v
+
+      # The EmirErs /go reusable workflow is live in every routine repo the moment it merges
+      # (they call it @main), so its guarantees are checked here first.
+      - name: Unit tests (emirers-go reusable workflow)
+        run: python3 -m unittest discover -s tests -v
 
       # The action itself, end to end, against its own fixtures: the fixture tree is
       # built to fail, so a green step here would mean the action stopped checking.
