@@ -8,6 +8,8 @@ on:
     paths:
       - "actions/**"
       - ".github/workflows/actions-test.yml"
+      - ".github/workflows/emirers-go.yml"
+      - "tests/**"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,11 @@ jobs:
 
       - name: Unit tests (brand-claim-check)
         run: python3 -m unittest discover -s actions/brand-claim-check/tests -v
+
+      # The EmirErs /go reusable workflow is live in every routine repo the moment it merges
+      # (they call it @main), so its guarantees are checked here first.
+      - name: Unit tests (emirers-go reusable workflow)
+        run: python3 -m unittest discover -s tests -v
 
       # The action itself, end to end, against its own fixtures: the fixture tree is
       # built to fail, so a green step here would mean the action stopped checking.
