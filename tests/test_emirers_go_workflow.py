@@ -1,8 +1,11 @@
 """The EmirErs /go reusable workflow (.github/workflows/emirers-go.yml): the rules its callers
 rely on. Standard library only; the step body is read as text, so a refactor that drops one of
 these guarantees fails here before any consumer picks it up."""
+import json
 import pathlib
 import re
+import shutil
+import subprocess
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -19,9 +22,10 @@ def condition(job):
 class ReusableWorkflow(unittest.TestCase):
     def test_is_a_reusable_workflow_with_the_stub_contract(self):
         self.assertIn("on:\n  workflow_call:\n", TEMPLATE)
-        for inp in ("routine_id:", "branch_prefix:", "founder:", "agent:"):
+        for inp in ("routine_id:", "routine_opus_id:", "branch_prefix:", "founder:", "agent:"):
             self.assertIn(inp, TEMPLATE)
         self.assertIn("secrets:\n      fire_token:", TEMPLATE)
+        self.assertIn("      fire_token_opus:\n        description:", TEMPLATE)
         for ref in ("${{ inputs.routine_id }}", "${{ inputs.branch_prefix }}", "${{ secrets.fire_token }}"):
             self.assertIn(ref, FIRE)
 
@@ -82,7 +86,7 @@ class ReusableWorkflow(unittest.TestCase):
 
     def test_marker_shape_watch_adopts(self):
         line = re.search(r"say \"(<!-- emirers-go-run [^\"]*-->)", FIRE).group(1)
-        self.assertEqual(line, "<!-- emirers-go-run branch=$branch mode=$mode session=$session -->")
+        self.assertEqual(line, "<!-- emirers-go-run branch=$branch mode=$mode session=$session routine=$fire_routine -->")
 
     def test_comment_text_never_reaches_a_command(self):
         """Untrusted text goes through env only; `${{ … }}` inside `run:` would be script injection."""
@@ -121,7 +125,95 @@ class ReusableWorkflow(unittest.TestCase):
 
     def test_least_privilege(self):
         self.assertIn("permissions:\n  contents: read\n  issues: write\n  pull-requests: read\n", TEMPLATE)
-        self.assertEqual(TEMPLATE.count("secrets."), 1)
+        self.assertEqual(TEMPLATE.count("secrets."), 2)
+
+
+JQ = re.search(r"jq -rs '(\[add // \[\] \| \.\[\]\n\s+\| select\(\.user\.login == \"github-actions\[bot\]\"\).*?last // \"\")'", FIRE, re.S).group(1)
+OPUS, SONNET = "trig_opus", "trig_sonnet"
+
+
+def marked(*comments):
+    """What the workflow's marker filter returns for (author, body) comments, oldest first."""
+    data = json.dumps([{"user": {"login": who}, "body": body} for who, body in comments])
+    out = subprocess.run(["jq", "-rs", JQ], input=data, capture_output=True, text=True, check=True)
+    return out.stdout.strip()
+
+
+def marker(routine=None):
+    extra = f" routine={routine}" if routine else ""
+    return f"<!-- emirers-go-run branch=feature/x/1-a mode=continue session=s_1{extra} -->\n🚀 `/go` started an agent"
+
+
+BOT = "github-actions[bot]"
+
+
+class OpusRoutine(unittest.TestCase):
+    """A continue run goes back to the routine the run started on; everything else stays on Sonnet."""
+
+    def test_opus_only_for_a_continue_run_with_an_opus_routine_configured(self):
+        gate = 'if [ "$mode" = "continue" ] && [ -n "$ROUTINE_OPUS" ]; then'
+        self.assertIn(gate, FIRE)
+        self.assertIn("fire_routine=$ROUTINE; fire_token=$FIRE_TOKEN\n", FIRE)
+        self.assertIn("fire_routine=$ROUTINE_OPUS; fire_token=$FIRE_TOKEN_OPUS", FIRE)
+        # Chosen before the fire, after the mode (and the task-only blocker gate) is known.
+        self.assertGreater(FIRE.index(gate), FIRE.index('mode="task"; branch=$fresh'))
+        self.assertLess(FIRE.index(gate), FIRE.index('case "$code" in'))
+        self.assertIn("routines/$fire_routine/fire", FIRE)
+        self.assertIn("Bearer $fire_token", FIRE)
+        self.assertNotIn("routines/$ROUTINE/fire", FIRE)
+        self.assertNotIn("Bearer $FIRE_TOKEN\"", FIRE)
+
+    def test_without_an_opus_routine_the_opus_secret_is_never_read(self):
+        self.assertIn("FIRE_TOKEN_OPUS: ${{ inputs.routine_opus_id != '' && secrets.fire_token_opus || '' }}", FIRE)
+        self.assertIn("      routine_opus_id:\n", TEMPLATE)
+        self.assertRegex(TEMPLATE, r"routine_opus_id:\n(?:        .*\n)*?        default: ''\n")
+
+    def test_opus_without_its_token_refuses_instead_of_falling_back(self):
+        block = FIRE.split('if [ "$marked" = "$ROUTINE_OPUS" ]; then', 1)[1].split("what=", 1)[0]
+        self.assertIn('if [ -z "$FIRE_TOKEN_OPUS" ]; then', block)
+        self.assertIn("react confused", block)
+        self.assertIn("exit 1", block)
+
+    def test_unreadable_comments_fire_nothing(self):
+        self.assertIn("if ! marked=$(gh api --paginate", FIRE)
+        after = FIRE.split("if ! marked=$(gh api --paginate", 1)[1]
+        self.assertLess(after.index("react confused"), after.index("exit 1"))
+        self.assertLess(after.index("exit 1"), after.index('case "$code" in') if 'case "$code" in' in after else len(after))
+
+    def test_the_marker_is_trusted_from_the_actions_bot_only(self):
+        self.assertIn('select(.user.login == "github-actions[bot]")', FIRE)
+
+    def test_comment_text_never_reaches_the_comparison_unvetted(self):
+        """The id is limited to a safe charset and only ever compared with the configured id."""
+        self.assertIn("routine=(?<r>[A-Za-z0-9_-]+)", FIRE)
+        self.assertNotIn("eval", FIRE)
+
+    @unittest.skipUnless(shutil.which("jq"), "jq not installed")
+    def test_marker_naming_opus_selects_opus(self):
+        self.assertEqual(marked((BOT, marker(OPUS))), OPUS)
+
+    @unittest.skipUnless(shutil.which("jq"), "jq not installed")
+    def test_newest_marker_wins(self):
+        self.assertEqual(marked((BOT, marker(OPUS)), (BOT, "🚀 other"), (BOT, marker(SONNET))), SONNET)
+        self.assertEqual(marked((BOT, marker(SONNET)), (BOT, marker(OPUS))), OPUS)
+
+    @unittest.skipUnless(shutil.which("jq"), "jq not installed")
+    def test_marker_naming_sonnet_or_without_the_field_or_absent_is_not_opus(self):
+        self.assertEqual(marked((BOT, marker(SONNET))), SONNET)
+        self.assertEqual(marked((BOT, marker())), "")
+        self.assertEqual(marked(), "")
+        self.assertEqual(marked((BOT, "just a comment")), "")
+
+    @unittest.skipUnless(shutil.which("jq"), "jq not installed")
+    def test_a_person_cannot_steer_the_routine(self):
+        for who in ("mertyertugrul", "luvita-agents", "github-actions", "copilot-pull-request-reviewer[bot]"):
+            self.assertEqual(marked((who, marker(OPUS))), "", who)
+        self.assertEqual(marked((BOT, marker(SONNET)), ("mertyertugrul", marker(OPUS))), SONNET)
+
+    @unittest.skipUnless(shutil.which("jq"), "jq not installed")
+    def test_only_the_first_line_of_a_comment_counts(self):
+        self.assertEqual(marked((BOT, "quoted:\n" + marker(OPUS))), "")
+        self.assertEqual(marked((BOT, "<!-- emirers-go-run -->\n routine=" + OPUS)), "")
 
 
 if __name__ == "__main__":
