@@ -58,8 +58,25 @@ on:
         required: true
         type: string
 
+# One review per PR at a time: a newer review replaces one in progress. Concurrency is
+# workflow-level, so it is evaluated BEFORE the job's `if:`, and an event the job will skip
+# (any other label, `opened` / `ready_for_review` on a PR that already carries the label, a
+# draft) would still join the group and cancel the running review, then skip itself
+# (Pelerin-desktop#78, 2026-10-12: `claude-review` and `build-bundles` added in the same
+# second left the PR with no review). So only an event that will review shares the PR's
+# group; every other one gets a group of its own (its run id) and cancels nothing.
+# The predicate below MUST stay the job's `if:` without the repo-level gates;
+# tests/test_claude_review_workflow.py fails when the two drift.
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || inputs.pr }}
+  group: >-
+    claude-review-${{ github.event.pull_request.number || inputs.pr }}-${{
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
+       (github.event.action != 'labeled' &&
+        github.event.pull_request.draft == false &&
+        !((github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+          contains(github.event.pull_request.labels.*.name, 'claude-review'))))
+      && 'review' || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -96,7 +113,7 @@ jobs:
       # branch>` itself and fails on a private repo without them. The token is
       # read-only here (`contents: read`), so nothing can be pushed with it.
       - name: Checkout (read-only, for context)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
