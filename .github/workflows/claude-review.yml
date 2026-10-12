@@ -113,7 +113,7 @@ jobs:
       # branch>` itself and fails on a private repo without them. The token is
       # read-only here (`contents: read`), so nothing can be pushed with it.
       - name: Checkout (read-only, for context)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
