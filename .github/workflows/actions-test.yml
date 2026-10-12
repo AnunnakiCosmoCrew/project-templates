@@ -27,8 +27,9 @@ jobs:
         run: python3 -m unittest discover -s actions/brand-claim-check/tests -v
 
       # The EmirErs /go reusable workflow is live in every routine repo the moment it merges
-      # (they call it @main), so its guarantees are checked here first.
-      - name: Unit tests (emirers-go reusable workflow)
+      # (they call it @main), so its guarantees are checked here first; the Claude review
+      # workflow's trigger and concurrency rules too, before its copies are rolled out (PT-43).
+      - name: Unit tests (emirers-go and claude-review workflows)
         run: python3 -m unittest discover -s tests -v
 
       # The action itself, end to end, against its own fixtures: the fixture tree is
