@@ -199,7 +199,7 @@ class OpusRoutine(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("jq"), "jq not installed")
     def test_marker_naming_sonnet_or_without_the_field_or_absent_is_not_opus(self):
-        self.assertNotEqual(marked((BOT, marker(SONNET))), OPUS)
+        self.assertEqual(marked((BOT, marker(SONNET))), SONNET)
         self.assertEqual(marked((BOT, marker())), "")
         self.assertEqual(marked(), "")
         self.assertEqual(marked((BOT, "just a comment")), "")
