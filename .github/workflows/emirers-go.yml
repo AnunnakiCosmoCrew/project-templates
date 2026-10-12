@@ -14,6 +14,12 @@
 #   - anything else (reopened after a merge, never dispatched): new work on a fresh branch
 #     `<branch_prefix><issue>-go-<time>`, refused while an open native blocker holds it back;
 #     the issue is assigned to the agent login once the agent runs.
+# A continue run goes to the routine the run started on: the newest `emirers-go-run` marker on the
+# issue (written by github-actions[bot] only, so no comment of a person can steer it) names the
+# routine it fired as `routine=<id>`; the Opus routine's id fires with the Opus token, anything else
+# (Sonnet, an older marker without the field, no marker, no Opus routine configured) fires Sonnet.
+# New work always starts on Sonnet: the board's Model & Effort is not readable here (`emirer` is the
+# path that honours it).
 # 🚀 fired (plus one comment with the session link and a marker `emirer watch` adopts the run
 # by), 😕 refused or failed (an open native blocker, the secret, the API; see the run), 👀 a /go
 # that fired in the last 45 minutes may still be running. A /go on a closed issue or a PR gets 😕
@@ -33,6 +39,11 @@ on:
         description: What goes before the issue number in a fresh branch (feature/pel-), from the registry branch pattern
         required: true
         type: string
+      routine_opus_id:
+        description: The repo's Opus routine (trig_…); a continue run whose last marker names it fires it. Leave out where there is none
+        required: false
+        type: string
+        default: ''
       founder:
         description: The GitHub login whose /go comments count
         required: false
@@ -47,6 +58,9 @@ on:
       fire_token:
         description: The routine's fire token (repo secret EMIRERS_FIRE_TOKEN in the caller)
         required: true
+      fire_token_opus:
+        description: The Opus routine's fire token (repo secret EMIRERS_FIRE_TOKEN_OPUS in the caller); needed only with routine_opus_id
+        required: false
 
 # The caller's job grants these; a called workflow can keep or reduce them, never raise them.
 permissions:
@@ -75,6 +89,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           FIRE_TOKEN: ${{ secrets.fire_token }}
           ROUTINE: ${{ inputs.routine_id }}
+          ROUTINE_OPUS: ${{ inputs.routine_opus_id }}
+          FIRE_TOKEN_OPUS: ${{ inputs.routine_opus_id != '' && secrets.fire_token_opus || '' }}
           BRANCH_PREFIX: ${{ inputs.branch_prefix }}
           FOUNDER: ${{ inputs.founder }}
           AGENT: ${{ inputs.agent }}
@@ -174,14 +190,43 @@ jobs:
             fi
           fi
 
+          # A continue run goes to the routine the run started on, read from the newest marker this workflow
+          # wrote (github-actions[bot] only; the charset is limited and the value is only ever compared).
+          # Fails closed: unreadable comments fire nothing, and so does an Opus run without its token,
+          # since a silent Sonnet fallback would continue the work on the wrong model.
+          fire_routine=$ROUTINE; fire_token=$FIRE_TOKEN
+          if [ "$mode" = "continue" ] && [ -n "$ROUTINE_OPUS" ]; then
+            if ! marked=$(gh api --paginate "repos/$REPO/issues/$ISSUE/comments?per_page=100" \
+                   | jq -rs '[add // [] | .[]
+                              | select(.user.login == "github-actions[bot]")
+                              | .body | split("\n")[0]
+                              | select(test("^<!-- emirers-go-run "))
+                              | (capture("routine=(?<r>[A-Za-z0-9_-]+)") // {r: ""}).r] | last // ""'); then
+              echo "::error::could not read #$ISSUE's comments"
+              react confused
+              say "😕 \`/go\` did not start an agent: GitHub did not answer which routine this run started on. Try \`/go\` again in a minute."
+              exit 1
+            fi
+            if [ "$marked" = "$ROUTINE_OPUS" ]; then
+              if [ -z "$FIRE_TOKEN_OPUS" ]; then
+                echo "::error::the Opus fire token secret is missing (emirers scripts/go-workflow.py secret <repo>)"
+                react confused
+                say "😕 \`/go\` cannot continue this run: it started on the Opus routine and the repo secret \`EMIRERS_FIRE_TOKEN_OPUS\` is missing."
+                exit 1
+              fi
+              fire_routine=$ROUTINE_OPUS; fire_token=$FIRE_TOKEN_OPUS
+              what="$what, on the Opus routine"
+            fi
+          fi
+
           if [ "$mode" = "continue" ]; then
             text=$(printf 'issue: %s\nbranch: %s\nmode: continue' "$ISSUE" "$branch")
           else
             text=$(printf 'issue: %s\nbranch: %s' "$ISSUE" "$branch")
           fi
           code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 30 -X POST \
-            "https://api.anthropic.com/v1/claude_code/routines/$ROUTINE/fire" \
-            -H "Authorization: Bearer $FIRE_TOKEN" \
+            "https://api.anthropic.com/v1/claude_code/routines/$fire_routine/fire" \
+            -H "Authorization: Bearer $fire_token" \
             -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
             -H "anthropic-version: 2023-06-01" \
             -H "Content-Type: application/json" \
@@ -209,7 +254,7 @@ jobs:
           url=$(jq -r '.claude_code_session_url // empty' resp.json 2>/dev/null || true)
           echo "Fired routine for #$ISSUE ($mode) on $branch: ${url:-no session url}" | tee -a "$GITHUB_STEP_SUMMARY" || true
           # The marker is what `emirer watch` adopts this run by (follow-ups, stuck, ready-to-merge).
-          say "<!-- emirers-go-run branch=$branch mode=$mode session=$session -->
+          say "<!-- emirers-go-run branch=$branch mode=$mode session=$session routine=$fire_routine -->
           🚀 \`/go\` started an agent, $what on \`$branch\`: ${url:-session link unavailable}"
 
   explain:
