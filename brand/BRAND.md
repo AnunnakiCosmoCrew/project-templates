@@ -42,8 +42,9 @@ file is the reason behind it.
 
 Public product names, exactly as written:
 
-- **LexiPower**, never "WordPower" (an internal codename).
-- **Umay**, never "Yaren" (a former name).
+- Use the names in the table above, spelled as shown. Internal codenames and
+  former names never appear in public; each site's `brand-rules.json` lists
+  the ones it bans.
 - **Nesili**: the name is not a registered trademark. Never write ® next to
   it, and add ™ only where the founder asks for it.
 - **CosmoCrew** in prose. `AnunnakiCosmoCrew` is the GitHub organisation name,
@@ -58,13 +59,14 @@ the page. The footer is the expected place. A chain through another site
 Luvita directly.
 
 Copy these strings verbatim. In all four, `Luvita Teknoloji Ltd. Şti.` is the
-link text and `https://luvita.tr/` is the target. The year follows the current
-year the way each site already handles it.
+link text and `https://luvita.tr/` is the target. `<year>` is the current
+year, filled in the way each site already handles it; everything else is
+copied as written.
 
 CosmoCrew surfaces (the apps and cosmocrew.dev):
 
-- EN: `© 2026 CosmoCrew — a brand of Luvita Teknoloji Ltd. Şti.`
-- TR: `© 2026 CosmoCrew — Luvita Teknoloji Ltd. Şti. markasıdır.`
+- EN: `© <year> CosmoCrew — a brand of Luvita Teknoloji Ltd. Şti.`
+- TR: `© <year> CosmoCrew — Luvita Teknoloji Ltd. Şti. markasıdır.`
 
 Direct Luvita products (Umay, Nesili, Luvi Engine, and any future product with
 no intermediate brand):
@@ -77,7 +79,7 @@ Rules around the line:
 - `© CosmoCrew` leads on CosmoCrew surfaces and is never replaced by
   `© Luvita`. CosmoCrew is a deliberate brand; the clause after it names the
   legal holder.
-- The holder is never a person. A line such as `© 2026 <a name> · <app>` is a
+- The holder is never a person. A line such as `© <year> <a person's name> · <app>` is a
   defect.
 - A new public product surface ships with the line on day one. Shipping
   without it is a defect, not a follow-up.
@@ -99,7 +101,9 @@ Rules around the line:
 
 - Never publish a street address on any of our own surfaces: sites, repos,
   READMEs, copy, screenshots.
-- Where a location is shown, it is city-level: "Bodrum, Muğla / Türkiye".
+- Where a site shows a location, it is city-level only, in the form
+  "<City>, <Province> / Türkiye". The site's `CLAUDE.md` says whether it shows
+  one at all.
 - **luvita.tr shows no city at all**: not in the hero, not in visible copy, not
   in a meta or social description. The city survives only in its JSON-LD
   address block.
@@ -112,10 +116,11 @@ Rules around the line:
 ### Nesili: the claim floor
 
 Never state or imply, in any language, on any surface (copy, README, docs,
-code comment, commit, issue or PR) that using Nesili means **no personal data
-crosses the border**, or that it **removes, waives or exempts the customer's
-KVKK Article 9 obligations**. Quoting that claim to deny it counts too; link to
-this rule instead of restating it.
+code comment, commit, issue or PR) that Nesili changes whether a transfer
+abroad takes place, or that it relieves the customer of any duty under KVKK
+Article 9. That includes repeating the claim in order to deny it: link to this
+rule instead. The exact phrasings are banned by the `brand-rules.json` files of
+the Nesili repositories, which are the only place they are written out.
 
 Write instead, in substance: Nesili keeps raw identifiers in Türkiye (on the
 desktop product: on the user's own computer) and materially reduces the
