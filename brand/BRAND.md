@@ -38,7 +38,6 @@ file is the reason behind it.
 | **Umay** | Luvita product, no intermediate brand | umayconnect.org |
 | **Nesili** | Luvita product, no intermediate brand | nesili.com |
 | **Luvi Engine** | Luvita product, no intermediate brand | none yet |
-| **Luvita Enerji** | A separate consumer solar business of the same company | its own site |
 
 Public product names, exactly as written:
 
@@ -83,7 +82,7 @@ Rules around the line:
   defect.
 - A new public product surface ships with the line on day one. Shipping
   without it is a defect, not a follow-up.
-- **Exception, Luvita Enerji:** the solar site names the company
+- **Exception, the solar site:** it names the company
   ("Bir Luvita Teknoloji kuruluşudur.") but does not link to luvita.tr. Software
   and solar stay apart in both directions.
 
