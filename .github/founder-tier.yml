@@ -1,0 +1,13 @@
+# Founder-tier rules for project-templates, added to the built-in TIER_RULES in
+# workflows/claude-pr-review.yml (extend only; read from the PR's base commit).
+# This repo's workflows/ and actions/ are the canonical copies every other repo
+# runs, so a change to them is security tier here, as .github/workflows/ is there.
+security:
+  - workflows/**
+  - actions/**
+  - global/**
+  - skill-templates/**
+  - skills/**
+  - scripts/install-*
+workflow_files:
+  - workflows/**

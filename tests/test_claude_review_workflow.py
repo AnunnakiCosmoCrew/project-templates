@@ -16,18 +16,25 @@ INSTALLED = ROOT / ".github" / "workflows" / "claude-review.yml"
 TEMPLATE = CANONICAL.read_text(encoding="utf-8")
 
 
-def block(after):
-    """The value of `after`: a folded (`>-`) scalar joined into one line, or a one-line value."""
+def block(after, job=None):
+    """The value of `after`: a folded (`>-`) scalar joined into one line, or a one-line value.
+    With `job`, only that job's section of the file is searched."""
+    text = TEMPLATE
+    if job:
+        m = re.search(r"\n  %s:\n(.*?)(?=\n  [\w-]+:\n|\Z)" % re.escape(job), TEMPLATE, re.S)
+        assert m, f"job {job} not found in {CANONICAL.name}"
+        text = m.group(1) + "\n"
     deeper = len(after) - len(after.lstrip(" ")) + 1         # continuation lines sit deeper than the key
-    m = re.search(re.escape(after) + r" >-\n((?:[ ]{%d,}.*\n)+)" % deeper, TEMPLATE)
+    m = re.search(re.escape(after) + r" >-\n((?:[ ]{%d,}.*\n)+)" % deeper, text)
     if m:
         return " ".join(line.strip() for line in m.group(1).splitlines())
-    m = re.search(re.escape(after) + r" (.+)\n", TEMPLATE)
+    m = re.search(re.escape(after) + r" (.+)\n", text)
     assert m, f"{after.strip()} not found in {CANONICAL.name}"
     return m.group(1).strip()
 
 
-JOB_IF = block("    if:")
+JOB_IF = block("    if:", job="review")
+TIER_IF = block("    if:", job="founder-tier")
 GROUP = block("  group:")
 
 
@@ -74,7 +81,8 @@ def event(action, labels=(), label=None, draft=False, name="pull_request", actor
 
 
 DISPATCH = {"github": {"event_name": "workflow_dispatch", "actor": "mertyertugrul", "repository": "AnunnakiCosmoCrew/x",
-                       "run_id": 9, "event": {}}, "vars": {"CLAUDE_REVIEW_ENABLED": "true"}, "inputs": {"pr": "78"}}
+                       "run_id": 9, "ref_name": "main", "event": {"repository": {"default_branch": "main"}}},
+            "vars": {"CLAUDE_REVIEW_ENABLED": "true"}, "inputs": {"pr": "78"}}
 
 CASES = {
     "label claude-review (draft)": event("labeled", ["claude-review"], "claude-review", draft=True),
@@ -88,7 +96,16 @@ CASES = {
     "ready_for_review with the label": event("ready_for_review", ["claude-review"], run_id=6),
     "reopened with the label": event("reopened", ["claude-review"]),
     "workflow_dispatch": DISPATCH,
+    # The founder-tier job's trigger (ADR 0007): it must never review and never join the group.
+    "target opened": event("opened", name="pull_request_target", run_id=10),
+    "target synchronize": event("synchronize", name="pull_request_target", run_id=11),
+    "target edited, with the label": event("edited", ["claude-review"], name="pull_request_target", run_id=12),
+    "target ready_for_review": event("ready_for_review", name="pull_request_target", run_id=13),
+    "target unlabeled needs-founder-review": event("unlabeled", label="needs-founder-review", name="pull_request_target", run_id=14),
+    "target labeled claude-review": event("labeled", ["claude-review"], "claude-review", name="pull_request_target", run_id=15),
 }
+TIERS = {"target opened", "target synchronize", "target edited, with the label", "target ready_for_review",
+         "target unlabeled needs-founder-review", "target labeled claude-review", "workflow_dispatch"}
 REVIEWS = {"label claude-review (draft)", "label claude-review", "opened, no label", "ready_for_review, no label",
            "reopened with the label", "workflow_dispatch"}
 
@@ -99,6 +116,7 @@ class ClaudeReviewWorkflow(unittest.TestCase):
 
     def test_translator_reads_both_expressions(self):
         self.assertIn("CLAUDE_REVIEW_ENABLED", JOB_IF)
+        self.assertIn("FOUNDER_TIER_ENABLED", TIER_IF)
         self.assertIn("github.run_id", GROUP)
         self.assertIs(evaluate(JOB_IF, CASES["label claude-review"]), True)
 
@@ -132,6 +150,34 @@ class ClaudeReviewWorkflow(unittest.TestCase):
         self.assertFalse(evaluate(JOB_IF, off))
         self.assertFalse(evaluate(JOB_IF, event("labeled", ["claude-review"], "claude-review", same_repo=False)))
         self.assertFalse(evaluate(JOB_IF, event("opened", actor="dependabot[bot]")))
+
+    def test_which_events_classify_the_founder_tier(self):
+        for name, ctx in CASES.items():
+            with self.subTest(name):
+                self.assertEqual(bool(evaluate(TIER_IF, ctx)), name in TIERS)
+
+    def test_dispatch_classifies_only_from_the_default_branch(self):
+        """Another branch's copy of the classifier must not run with a write token."""
+        branch = {**DISPATCH, "github": {**DISPATCH["github"], "ref_name": "feature/x"}}
+        self.assertFalse(evaluate(TIER_IF, branch))
+        self.assertTrue(evaluate(TIER_IF, DISPATCH))
+
+    def test_founder_tier_is_independent_of_the_review_switch_and_has_its_own(self):
+        ctx = CASES["target opened"]
+        self.assertTrue(evaluate(TIER_IF, dict(ctx, vars={"CLAUDE_REVIEW_ENABLED": "false"})))
+        self.assertTrue(evaluate(TIER_IF, dict(ctx, vars={})))
+        self.assertFalse(evaluate(TIER_IF, dict(ctx, vars={"FOUNDER_TIER_ENABLED": "false"})))
+
+    def test_pull_request_target_only_feeds_the_founder_tier_job(self):
+        """pull_request_target runs the default branch's file with a write token: only the
+        founder-tier job (no checkout) may run on it, never the review."""
+        types = re.search(r"pull_request_target:\n\s+types: \[(.*?)\]", TEMPLATE).group(1)
+        self.assertIn("unlabeled", types)                    # a removed label is put back
+        for action in [t.strip() for t in types.split(",")]:
+            with self.subTest(action):
+                ctx = event(action, name="pull_request_target")
+                self.assertFalse(evaluate(JOB_IF, ctx))
+                self.assertTrue(evaluate(TIER_IF, ctx))
 
 
 if __name__ == "__main__":
