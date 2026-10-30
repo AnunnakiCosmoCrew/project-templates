@@ -175,4 +175,4 @@ Multiple Claude Code agents may work on this repo concurrently. To prevent files
 - **Project board**: GitHub Projects board #{{PROJECT_BOARD_NUMBER}} (`{{REPO_OWNER}}` org)
 - **Issue tracking**: GitHub Issues on this repo + the project board
 - **Board fields**: `Status`, `Priority`, `Estimate` (Fibonacci 0, 1, 2, 3, 5, 8, 13), `Model & Effort`, `Dependent` (blocking peer issues), `Parent issue` (for sub-issue decomposition)
-- **Architecture decisions**: Documented in `{{REPO_OWNER}}/{{DOCS_REPO}}` (drafts) and promoted to `docs/decisions/` here when accepted
+- **Architecture decisions**: Documented in `{{REPO_OWNER}}/{{DOCS_REPO}}` (drafts) and promoted to `docs/decisions/` here when accepted. Write each ADR from [`ADR.template.md`](https://github.com/AnunnakiCosmoCrew/project-templates/blob/main/ADR.template.md) (evidence, dated metric, alternatives, kill criteria, reversibility; luvita-docs ADR 0006)
