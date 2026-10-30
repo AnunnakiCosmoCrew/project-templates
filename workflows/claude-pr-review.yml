@@ -47,10 +47,35 @@ name: Claude PR review
 # `--allowedTools` lists gh read commands and the inline-comment tool, never a
 # blanket Bash. Fork PRs get no secrets from GitHub anyway; Dependabot PRs are
 # skipped because they do not receive repository secrets either.
+#
+# FOUNDER TIER (job `founder-tier`, luvita-docs ADR 0007 §1 and §2): a script, not
+# the PR's author, decides whether the founder reads the PR. It reads the changed
+# files and the PR body through the API, applies the path table in TIER_RULES,
+# reads the body's `Founder check:` line (it can raise the tier, never lower it; no
+# line is `product`, as in ADR 0004) and sets one `tier:<name>` label per tier found
+# (`tier:none` when there is none), removing stale ones. A PR that is not provably
+# tidying also gets `needs-founder-review`; `emirer watch` reads that label and
+# requests the founder's review (emirers#156). Tidying means: computed tier `none`,
+# no changed config file, and no test assertion line added, changed or removed.
+#   - It runs on `pull_request_target`, so GitHub runs the DEFAULT BRANCH's copy of
+#     this file: a PR cannot edit the classifier that labels it. That is safe only
+#     because the job checks out nothing and runs nothing from the PR; file names and
+#     the body are read as data. Keep it that way.
+#   - Free of the review's switch and secret; it needs only GITHUB_TOKEN. Turn it off
+#     with `gh variable set FOUNDER_TIER_ENABLED --body false --repo <owner>/<repo>`.
+#   - Extend the lists, never replace them: commit `.github/founder-tier.yml` (same
+#     shape as TIER_RULES) on the default branch. Its entries are added to the
+#     built-in ones; it is read from the PR's base commit, so a PR cannot loosen
+#     its own classification, and editing it is itself security tier.
+#   - Fails safe: any error labels `needs-founder-review` and `tier:security`, and
+#     the job goes red. It is not a required check either.
 
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, labeled]
+  # The founder-tier job only. Re-labels on every push and every body edit.
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
   workflow_dispatch:
     inputs:
       pr:
@@ -65,26 +90,530 @@ on:
 # (Pelerin-desktop#78, 2026-10-12: `claude-review` and `build-bundles` added in the same
 # second left the PR with no review). So only an event that will review shares the PR's
 # group; every other one gets a group of its own (its run id) and cancels nothing.
+# A `pull_request_target` run (the founder-tier job) never reviews, so it never joins.
 # The predicate below MUST stay the job's `if:` without the repo-level gates;
 # tests/test_claude_review_workflow.py fails when the two drift.
 concurrency:
   group: >-
     claude-review-${{ github.event.pull_request.number || inputs.pr }}-${{
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
-       (github.event.action != 'labeled' &&
-        github.event.pull_request.draft == false &&
-        !((github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
-          contains(github.event.pull_request.labels.*.name, 'claude-review'))))
+       (github.event_name == 'pull_request' &&
+        ((github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
+         (github.event.action != 'labeled' &&
+          github.event.pull_request.draft == false &&
+          !((github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+            contains(github.event.pull_request.labels.*.name, 'claude-review'))))))
       && 'review' || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  # Runs beside the review, not before it: the review does not read the labels, and an
+  # outage here must not cost a review (or the other way round).
+  founder-tier:
+    if: >-
+      vars.FOUNDER_TIER_ENABLED != 'false' &&
+      (github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Two quick pushes: the newer run replaces the older, so the last word is the newest diff.
+    concurrency:
+      group: founder-tier-${{ github.event.pull_request.number || inputs.pr }}
+      cancel-in-progress: true
+    permissions:
+      contents: read          # .github/founder-tier.yml at the PR's base commit
+      pull-requests: read     # the PR, its body and its files
+      issues: write           # create the labels; add and remove them on the PR
+    steps:
+      # No checkout, on purpose: see FOUNDER TIER at the top. The PR number reaches the
+      # script through env, never through `${{ }}` inside `run:`.
+      - name: Classify the founder tier and label the PR
+        env:
+          # The ADR 0007 §1 path table. Globs: `**` crosses folders, `*` does not; a
+          # pattern without `/` matches the file name in any folder; case-insensitive.
+          # A renamed file is checked under both names. Extend in .github/founder-tier.yml.
+          TIER_RULES: |
+            security:
+              - .github/**
+              - CODEOWNERS
+              - .claude/**
+              - '**/.claude/**'
+              - managed-settings*.json
+              - .githooks/**
+              - .husky/**
+              - '**/auth/**'
+              - '**/authentication/**'
+              - '**/authorization/**'
+              - '**/security/**'
+              - '*auth.*'
+              - '*authenticat*'
+              - '*authoriz*'
+              - '*oauth*'
+              - '*jwt*'
+              - '*sessionmanager*'
+              - '*sessionstore*'
+              - '*secret*'
+              - '*credential*'
+              - '*password*'
+              - .env
+              - .env.*
+              - '*.env'
+              - '*.pem'
+              - '*.key'
+              - '*.p12'
+              - '*.jks'
+              - '*.keystore'
+              - '*.entitlements'
+              - '*.mobileprovision'
+              - firestore.rules
+              - storage.rules
+              - '*.rules.json'
+              # dependency files are security tier too (ADR 0007 §1)
+              - pom.xml
+              - build.gradle
+              - build.gradle.kts
+              - settings.gradle
+              - settings.gradle.kts
+              - libs.versions.toml
+              - gradle-wrapper.properties
+              - pubspec.yaml
+              - pubspec.lock
+              - package.json
+              - package-lock.json
+              - npm-shrinkwrap.json
+              - yarn.lock
+              - pnpm-lock.yaml
+              - bun.lock
+              - bun.lockb
+              - requirements*.txt
+              - pyproject.toml
+              - poetry.lock
+              - uv.lock
+              - Pipfile
+              - Pipfile.lock
+              - Cargo.toml
+              - Cargo.lock
+              - go.mod
+              - go.sum
+              - Gemfile
+              - Gemfile.lock
+              - Podfile
+              - Podfile.lock
+              - Package.swift
+              - Package.resolved
+              - '*.podspec'
+            irreversible:
+              - '**/migrations/**'
+              - '**/migration/**'
+              - '**/db/migrate/**'
+              - '**/db/changelog/**'
+              - '**/flyway/**'
+              - '**/liquibase/**'
+              - 'V*__*.sql'
+              - '*schema*.sql'
+              - schema.prisma
+              - '**/deploy/**'
+              - '**/deployment/**'
+              - '**/infra/**'
+              - '**/infrastructure/**'
+              - '**/k8s/**'
+              - '**/kubernetes/**'
+              - '**/helm/**'
+              - '**/terraform/**'
+              - '*.tf'
+              - '*.tfvars'
+              - Dockerfile
+              - Dockerfile.*
+              - '*.dockerfile'
+              - cloudbuild*.yaml
+              - cloudbuild*.yml
+              - firebase.json
+              - .firebaserc
+              - fly.toml
+              - wrangler.toml
+              - wrangler.json
+              - wrangler.jsonc
+              - netlify.toml
+              - vercel.json
+              - _redirects
+              - _headers
+              - CNAME
+              - '**/fastlane/**'
+            money:
+              - '**/billing/**'
+              - '*billing*'
+              - '**/payment/**'
+              - '**/payments/**'
+              - '*payment*'
+              - '*invoice*'
+              - '*purchase*'
+              - '*subscription*'
+              - '*paywall*'
+              - '*pricing*'
+              - '*stripe*'
+              - '*revenuecat*'
+              - '**/iap/**'
+              - '**/terraform/**'
+              - '*.tf'
+              - '*.tfvars'
+              - cloudbuild*.yaml
+              - cloudbuild*.yml
+            public:
+              - src/content/**
+              - 'src/**/*.md'
+              - 'src/**/*.mdx'
+              - '**/locales/**'
+              - '**/locale/**'
+              - '**/i18n/**'
+              - '**/l10n/**'
+              - '**/translations/**'
+              - '*.arb'
+              - '*.xcstrings'
+              - '*.strings'
+              - '**/fastlane/metadata/**'
+              - '**/store-listing/**'
+              - '**/app-store/**'
+              - '**/play-store/**'
+              - '*privacy*'
+              - '*terms*'
+              - '*legal*'
+              - '*license*'
+              - '*licence*'
+              - '*kvkk*'
+              - '*gdpr*'
+              - '*impressum*'
+              - '*disclaimer*'
+              - '*eula*'
+              - '**/brand/**'
+              - '**/branding/**'
+              - '*brand*.md'
+              - '*logo.*'
+              - logo-*
+              - logo_*
+              - favicon*
+              - apple-touch-icon*
+              - og-image*
+              - '**/*.appiconset/**'
+            # No tier, but a PR that touches one is a feature PR (ADR 0007 §2: config change).
+            not_tidying:
+              - '*.properties'
+              - application*.yml
+              - application*.yaml
+              - '*.toml'
+              - '*.ini'
+              - '*.cfg'
+              - '*.conf'
+              - '**/config/**'
+              - '*.config.*'
+              - tsconfig*.json
+              - analysis_options.yaml
+              - .eslintrc*
+              - eslint.config.*
+              - .prettierrc*
+              - docker-compose*
+              - compose.yaml
+              - compose.yml
+              - '*.plist'
+              - AndroidManifest.xml
+              - '*.xcconfig'
+              - '*.pbxproj'
+              - '*.xcscheme'
+              - Makefile
+            # Test files whose changed lines are searched for assertions.
+            test_files:
+              - '**/src/test/**'
+              - '**/test/**'
+              - '**/tests/**'
+              - '**/__tests__/**'
+              - '**/integration_test/**'
+              - '**/androidTest/**'
+              - '**/*Tests/**'
+              - '*_test.*'
+              - '*.test.*'
+              - '*.spec.*'
+              - 'test_*.py'
+              - '*Test.java'
+              - '*Test.kt'
+              - '*Tests.swift'
+            # A changed (+ or -) line in a test file matching one of these is an assertion.
+            assertion_lines:
+              - '\bassert\w*\s*[(\s!]'
+              - '\bexpect\w*\s*\('
+              - '#expect\s*\('
+              - '#require\s*\('
+              - '\bXCTAssert\w*\s*\('
+              - '\bXCTFail\s*\('
+              - '\bverify\w*\s*\('
+              - '\.to[A-Z]\w*\s*\('
+              - '\.to\.\w+'
+              - '\bshould\w*\s*[(.]'
+              - '\bfail\s*\('
+              - '\bpytest\.raises\b'
+            # A changed line in a workflow file matching one of these adds the money tier
+            # (new or changed schedule, runner or matrix). An unreadable diff counts too.
+            workflow_files:
+              - .github/workflows/**
+            money_workflow_lines:
+              - '^\s*-?\s*(schedule|cron|runs-on|matrix)\s*:'
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        # The script is a pure classifier plus a thin API layer; tests/test_founder_tier.py
+        # runs it straight from this file, so it is the only copy.
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys, urllib.error, urllib.parse, urllib.request
+
+          PATH_TIERS = ("irreversible", "security", "money", "public")
+          TIERS = PATH_TIERS + ("product",)
+          LIST_KEYS = PATH_TIERS + ("not_tidying", "test_files", "workflow_files")
+          REGEX_KEYS = ("assertion_lines", "money_workflow_lines")
+          KNOWN_KEYS = LIST_KEYS + REGEX_KEYS
+          FEATURE = "needs-founder-review"
+          FAIL_SAFE = (FEATURE, "tier:security")
+          COLORS = {"tier:irreversible": "b60205", "tier:security": "d93f0b", "tier:money": "fbca04",
+                    "tier:public": "0e8a16", "tier:product": "1d76db", "tier:none": "ededed", FEATURE: "5319e7"}
+          DESCRIPTIONS = {FEATURE: "Feature PR: the founder reads it before merge (ADR 0007)"}
+          FOUNDER_CHECK = re.compile(r"^[ \t>*_-]*founder check[*_`]*[ \t]*:[*_` \t]*([A-Za-z-]+)", re.I | re.M)
+
+
+          def parse_rules(text, source):
+              """The TIER_RULES shape: `key:` lines, each followed by `  - value` lines.
+              Whole-line `#` comments; values may be quoted. Anything else is an error."""
+              rules, key = {}, None
+              for n, raw in enumerate(text.splitlines(), 1):
+                  s = raw.strip()
+                  if not s or s.startswith("#"):
+                      continue
+                  m = re.fullmatch(r"([a-z_]+):", s)
+                  if m and not raw[0].isspace():
+                      key = m.group(1)
+                      if key not in KNOWN_KEYS:
+                          raise ValueError(f"{source} line {n}: unknown key {key!r}")
+                      rules.setdefault(key, [])
+                      continue
+                  m = re.fullmatch(r"-\s+(.+)", s)
+                  if m and key and raw[0].isspace():
+                      v = m.group(1)
+                      if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                          v = v[1:-1]
+                      rules[key].append(v)
+                      continue
+                  raise ValueError(f"{source} line {n}: cannot read {s!r}")
+              return rules
+
+
+          def merge(base, extra):
+              """Extend, never replace: every built-in entry stays."""
+              out = {k: list(v) for k, v in base.items()}
+              for k, v in extra.items():
+                  out.setdefault(k, [])
+                  out[k] += [x for x in v if x not in out[k]]
+              return out
+
+
+          def glob_re(pattern):
+              p = pattern.strip().lstrip("/")
+              name_only = "/" not in p
+              out, i = "", 0
+              while i < len(p):
+                  if p.startswith("**/", i):
+                      out, i = out + "(?:.*/)?", i + 3
+                  elif p.startswith("/**", i) and i + 3 == len(p):
+                      out, i = out + "(?:/.*)?", i + 3
+                  elif p.startswith("**", i):
+                      out, i = out + ".*", i + 2
+                  elif p[i] == "*":
+                      out, i = out + "[^/]*", i + 1
+                  elif p[i] == "?":
+                      out, i = out + "[^/]", i + 1
+                  else:
+                      out, i = out + re.escape(p[i]), i + 1
+              return re.compile(out + r"\Z", re.I | re.S), name_only     # S: a newline in a name cannot dodge `**`
+
+
+          def compile_rules(rules):
+              globs = {k: [glob_re(p) for p in rules.get(k, [])] for k in LIST_KEYS}
+              regexes = {k: [re.compile(p) for p in rules.get(k, [])] for k in REGEX_KEYS}
+              return globs, regexes
+
+
+          def matches(globs, path):
+              name = path.rsplit("/", 1)[-1]
+              return any(rx.match(name if name_only else path) for rx, name_only in globs)
+
+
+          def changed_lines(patch):
+              return [l[1:] for l in (patch or "").splitlines() if l[:1] in ("+", "-")]
+
+
+          def declared_tiers(body):
+              """Tiers the `Founder check:` line(s) name. No line, or a word that is not a
+              tier, is `product`: founder-tier, as in ADR 0004."""
+              words = [w.lower() for w in FOUNDER_CHECK.findall(body or "")]
+              if not words:
+                  return {"product"}, "no `Founder check:` line"
+              out = set()
+              for w in words:
+                  if w in TIERS:
+                      out.add(w)
+                  elif w != "none":
+                      out.add("product")
+              return out, "Founder check: " + ", ".join(words)
+
+
+          def classify(files, body, rules, truncated=False):
+              """Pure: the PR's file list (REST `pulls/N/files` items) and body in, the
+              tiers, the labels and the reasons out."""
+              globs, regexes = compile_rules(rules)
+              path = {t: [] for t in PATH_TIERS}
+              not_tidy = []
+              for f in files:
+                  name = f["filename"]
+                  names = [name] + ([f["previous_filename"]] if f.get("previous_filename") else [])
+                  patch = f.get("patch")
+                  lines = changed_lines(patch)
+                  # No patch and no changed lines (a pure rename, a binary) is readable: nothing
+                  # changed. No patch with changes (a diff too large for the API) is not.
+                  unreadable = patch is None and f.get("changes") != 0
+                  for t in PATH_TIERS:
+                      if any(matches(globs[t], n) for n in names):
+                          path[t].append(name)
+                  if any(matches(globs["workflow_files"], n) for n in names):
+                      if unreadable:
+                          path["money"].append(name + " (diff not readable)")
+                      elif any(rx.search(l) for rx in regexes["money_workflow_lines"] for l in lines):
+                          path["money"].append(name + " (schedule, runner or matrix)")
+                  if any(matches(globs["not_tidying"], n) for n in names):
+                      not_tidy.append("config file: " + name)
+                  if any(matches(globs["test_files"], n) for n in names):
+                      if unreadable:
+                          not_tidy.append("test diff not readable: " + name)
+                      elif any(rx.search(l) for rx in regexes["assertion_lines"] for l in lines):
+                          not_tidy.append("test assertion added, changed or removed: " + name)
+              if truncated:
+                  path["security"].append("(file list truncated: not every file was read)")
+              declared, said = declared_tiers(body)
+              found = {t for t, v in path.items() if v} | declared
+              tiers = [t for t in TIERS if t in found] or ["none"]
+              feature = ["tier " + t for t in tiers if t != "none"] + not_tidy
+              labels = ["tier:" + t for t in tiers] + ([FEATURE] if feature else [])
+              return {"tiers": tiers, "labels": labels, "path": {t: v for t, v in path.items() if v},
+                      "declared": sorted(declared), "said": said, "feature": feature}
+
+
+          class Api:
+              def __init__(self, token, base):
+                  self.token, self.base = token, base.rstrip("/")
+
+              def call(self, method, path, data=None, accept="application/vnd.github+json"):
+                  req = urllib.request.Request(
+                      self.base + path, method=method,
+                      data=None if data is None else json.dumps(data).encode(),
+                      headers={"Authorization": "Bearer " + self.token, "Accept": accept,
+                               "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json"})
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          return r.status, r.read()
+                  except urllib.error.HTTPError as e:
+                      return e.code, e.read()
+
+              def json(self, method, path, data=None):
+                  status, raw = self.call(method, path, data)
+                  if status >= 300:
+                      raise RuntimeError(f"{method} {path}: HTTP {status} {raw[:200]!r}")
+                  return json.loads(raw) if raw else None
+
+
+          def set_labels(api, repo, pr, current, wanted):
+              for name in wanted:
+                  # 422: the label exists already. Anything else fails at the add below.
+                  api.call("POST", f"/repos/{repo}/labels",
+                           {"name": name, "color": COLORS.get(name, "ededed"),
+                            "description": DESCRIPTIONS.get(name, "Founder tier from the diff (ADR 0007)")})
+              add = [l for l in wanted if l not in current]
+              if add:
+                  api.json("POST", f"/repos/{repo}/issues/{pr}/labels", {"labels": add})
+              ours = [l for l in current if l.startswith("tier:") or l == FEATURE]
+              for name in ours:
+                  if name not in wanted:
+                      status, raw = api.call("DELETE", f"/repos/{repo}/issues/{pr}/labels/" + urllib.parse.quote(name, safe=""))
+                      if status not in (200, 204, 404):
+                          raise RuntimeError(f"remove {name}: HTTP {status}")
+              return add
+
+
+          def clean(text):
+              """File names come from the PR: no control characters (a newline could start a
+              workflow command in the log) and no backticks (they would break the summary)."""
+              return re.sub(r"[\x00-\x1f\x7f`]", "?", text)
+
+
+          def summary(result, added):
+              out = ["## Founder tier", "", "Labels: " + ", ".join(f"`{l}`" for l in result["labels"]), "",
+                     f"- From the body: {result['said']} (counts as: {', '.join(result['declared']) or 'none'})"]
+              for t, names in result["path"].items():
+                  out.append(f"- From the diff, **{t}**: " + ", ".join(f"`{clean(n)}`" for n in names[:20])
+                             + (f" and {len(names) - 20} more" if len(names) > 20 else ""))
+              if result["feature"]:
+                  out.append("- Feature PR (`" + FEATURE + "`) because: " + "; ".join(clean(x) for x in result["feature"][:20]))
+              else:
+                  out.append("- Tidying PR: tier none, no config change, no test assertion changed")
+              out.append("- Added this run: " + (", ".join(added) or "nothing"))
+              return "\n".join(out) + "\n"
+
+
+          def run(api, repo, pr, rules_text):
+              if not re.fullmatch(r"[0-9]+", pr or "") or not re.fullmatch(r"[\w.-]+/[\w.-]+", repo or ""):
+                  raise ValueError(f"bad repo or PR number: {repo!r} {pr!r}")
+              pull = api.json("GET", f"/repos/{repo}/pulls/{pr}")
+              rules = parse_rules(rules_text, "TIER_RULES")
+              status, raw = api.call("GET", f"/repos/{repo}/contents/.github/founder-tier.yml?ref={pull['base']['sha']}",
+                                     accept="application/vnd.github.raw")
+              if status == 200:
+                  rules = merge(rules, parse_rules(raw.decode("utf-8"), ".github/founder-tier.yml"))
+              elif status != 404:
+                  raise RuntimeError(f"read .github/founder-tier.yml: HTTP {status}")
+              files = []
+              for page in range(1, 31):                         # the API lists at most 3,000 files
+                  batch = api.json("GET", f"/repos/{repo}/pulls/{pr}/files?per_page=100&page={page}")
+                  files += batch
+                  if len(batch) < 100:
+                      break
+              result = classify(files, pull.get("body"), rules, truncated=len(files) < pull.get("changed_files", 0))
+              added = set_labels(api, repo, pr, [l["name"] for l in pull.get("labels", [])], result["labels"])
+              return result, added
+
+
+          def main(api=None, env=os.environ):
+              repo, pr = env.get("REPO"), env.get("PR")
+              api = api or Api(env.get("GH_TOKEN", ""), env.get("GITHUB_API_URL", "https://api.github.com"))
+              try:
+                  result, added = run(api, repo, pr, env.get("TIER_RULES", ""))
+              except Exception as e:
+                  print(f"::error::founder tier: {e}. Labelling fail-safe: {', '.join(FAIL_SAFE)}")
+                  try:
+                      set_labels(api, repo, pr, [], list(FAIL_SAFE))
+                  except Exception as e2:
+                      print(f"::error::fail-safe labels not set either: {e2}")
+                  return 1
+              text = summary(result, added)
+              print(text)
+              if env.get("GITHUB_STEP_SUMMARY"):
+                  with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+                      fh.write(text)
+              return 0
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          PY
+
   review:
     if: >-
       vars.CLAUDE_REVIEW_ENABLED == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.pull_request.head.repo.full_name == github.repository &&
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
         github.actor != 'dependabot[bot]' &&
         ((github.event.action == 'labeled' && github.event.label.name == 'claude-review') ||
          (github.event.action != 'labeled' &&
