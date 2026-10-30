@@ -127,8 +127,8 @@ jobs:
       cancel-in-progress: true
     permissions:
       contents: read          # .github/founder-tier.yml at the PR's base commit
-      pull-requests: read     # the PR, its body and its files
-      issues: write           # create the labels; add and remove them on the PR
+      pull-requests: write    # add and remove labels on the PR (issues: write alone gets HTTP 403 on a PR)
+      issues: write           # create the labels in the repo
       statuses: write         # `founder-tier/classified` on the head commit that was read
     steps:
       # No checkout, on purpose: see FOUNDER TIER at the top. The PR number reaches the

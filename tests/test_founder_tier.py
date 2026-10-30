@@ -414,6 +414,15 @@ class WorkflowShape(unittest.TestCase):
         self.assertNotIn("${{", _script())
         self.assertIn("pull_request_target:", WORKFLOW)
 
+    def test_job_can_write_labels_on_a_pull_request(self):
+        # Adding a label to a PR through the issues API needs pull-requests: write;
+        # with issues: write alone GitHub answers 403 (seen live on PR #56).
+        job = WORKFLOW.split("\n  founder-tier:\n", 1)[1].split("\n  review:\n", 1)[0]
+        perms = re.search(r"\n    permissions:\n((?:      .*\n)+)", job).group(1)
+        granted = dict(re.findall(r"^\s+([\w-]+):\s*(\w+)", perms, re.M))
+        self.assertEqual(granted, {"contents": "read", "pull-requests": "write",
+                                   "issues": "write", "statuses": "write"})
+
 
 if __name__ == "__main__":
     unittest.main()
