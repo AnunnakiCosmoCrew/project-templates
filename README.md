@@ -145,7 +145,7 @@ the repo's only `pull_request` workflow. If there are several, it lists them and
 
 ## Founder tier labels (ADR 0007)
 
-The `founder-tier` job in [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) decides, from the diff and not from the PR's author, whether the founder reads a PR ([luvita-docs ADR 0007](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0007-feature-pr-review-and-deterministic-tiering.md) §1 and §2). It runs on every push and body edit, reads `pulls/N/files` and the body over REST, and sets:
+The `founder-tier` job in [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) decides, from the diff and not from the PR's author, whether the founder reads a PR ([luvita-docs ADR 0007](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0007-feature-pr-review-and-deterministic-tiering.md) §1 and §2). It runs on every push, body edit and label change, reads `pulls/N/files` and the body over REST, and sets:
 
 | Label | Meaning |
 | --- | --- |
@@ -154,12 +154,13 @@ The `founder-tier` job in [`workflows/claude-pr-review.yml`](workflows/claude-pr
 | `tier:none` | No tier from either source. |
 | `needs-founder-review` | A feature PR: anything not provably tidying. Tidying means tier `none`, no config file changed, and no test assertion line added, changed or removed. `emirer watch` reads this label and requests the founder's review ([emirers#156](https://github.com/AnunnakiCosmoCrew/emirers/issues/156)). |
 
-The `Founder check:` line can raise the tier, never lower it. Stale `tier:*` labels are removed, and `needs-founder-review` is removed when a later push makes the PR tidying. The run's summary lists the files behind each label.
+The `Founder check:` line can raise the tier, never lower it. Stale `tier:*` labels are removed, and `needs-founder-review` is removed when a later push makes the PR tidying. The label means "feature PR", not "review pending": removing it by hand starts a run that puts it back. Each successful run also sets the commit status `founder-tier/classified` (description: the labels) on the head commit it read, so a reader can tell a stale or missing classification from a tidying one: treat a PR whose current head has no such status, or no `tier:` label, as a feature PR. The run's summary lists the files behind each label.
 
 - **Why `pull_request_target`:** GitHub then runs the default branch's copy of the file, so a PR cannot edit the classifier that labels it. That is safe only because the job checks out and runs nothing from the PR. A newly installed or changed copy therefore takes effect after it merges.
 - **Extending the rules:** commit `.github/founder-tier.yml` on the default branch, in the same shape as `TIER_RULES` (keys: the four tiers, `not_tidying`, `test_files`, `assertion_lines`, `workflow_files`, `money_workflow_lines`). Entries are added to the built-in lists, never replace them, and the file is read from the PR's base commit. This repo's own copy makes `workflows/**`, `actions/**` and the other synced templates security tier. An unknown key or unreadable line is an error.
-- **Fail-safe:** any error (API, bad rules file, bad PR number) labels `needs-founder-review` and `tier:security`, and the job goes red. It is not a required check.
-- **Off switch:** `gh variable set FOUNDER_TIER_ENABLED --body false --repo <owner>/<repo>`. It does not depend on `CLAUDE_REVIEW_ENABLED` or the review token; it needs only `GITHUB_TOKEN` (`issues: write` to create and set labels).
+- **Fail-safe:** any error (API, bad rules file) labels `needs-founder-review` and `tier:security`, removes `tier:none`, sets no `classified` status, and the job goes red. It is not a required check, but `git-guard.py` refuses `gh pr merge` while any check is red, so a failed run blocks the merge until it is re-run (`gh run rerun <id> --failed`). An invalid PR number sets nothing.
+- **Manual run:** `workflow_dispatch` classifies only when started from the default branch; from any other ref the job is skipped, since that ref's copy of the classifier would run with a write token.
+- **Off switch:** `gh variable set FOUNDER_TIER_ENABLED --body false --repo <owner>/<repo>`. It does not depend on `CLAUDE_REVIEW_ENABLED` or the review token; it needs only `GITHUB_TOKEN` (`issues: write` to create and set labels, `statuses: write` for the status).
 - **Tests:** `tests/test_founder_tier.py` runs the script straight from the workflow file (one case per row of the table, the `Founder check:` rules, the tidying test, extension, fail-safe); `actions-test.yml` runs it.
 
 ## Bug workflows: close audit + test coverage (code repos)

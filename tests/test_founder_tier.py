@@ -59,7 +59,13 @@ class PathTable(unittest.TestCase):
         for name in [".github/workflows/ci.yml", ".github/CODEOWNERS", "CODEOWNERS", ".claude/settings.json",
                      "app/.claude/skills/x.md", "src/main/java/dev/x/auth/JwtFilter.java", "lib/services/oauth.dart",
                      "src/useAuth.ts", "backend/src/main/java/dev/x/security/Config.java", ".env.production",
-                     "ios/Runner/Runner.entitlements", "firestore.rules"]:
+                     "ios/Runner/Runner.entitlements", "firestore.rules",
+                     # real names from the portfolio that the first version missed (review of #55)
+                     "src/main/java/dev/x/api/AuthController.java", "lib/services/auth_service.dart",
+                     "src/main/java/dev/x/config/AuthProperties.java",
+                     "src/main/java/dev/x/jobs/InternalJobsSecurityConfig.java",
+                     "src/main/java/dev/x/jobs/InvokerTokenFilter.java", "src/main/java/dev/x/DelegatedTokenIssuer.java",
+                     "lib/firebase_auth_repository.dart", ".pre-commit-config.yaml", "lefthook.yml"]:
             with self.subTest(name):
                 self.assertTier(name, "security")
 
@@ -90,6 +96,12 @@ class PathTable(unittest.TestCase):
         self.assertTier(".github/workflows/ios.yml", "money", runner)
         plain = classify([f(".github/workflows/ci.yml", "@@ -20 +20 @@\n-      run: make a\n+      run: make b")])
         self.assertEqual(plain["tiers"], ["security"])
+        for patch in ["@@ -5 +5 @@\n-        os: [ubuntu-latest]\n+        os: [ubuntu-latest, macos-15]",
+                      "@@ -6,0 +7,2 @@\n+          - os: windows-2025\n+            flutter: beta",
+                      "@@ -2,2 +2,3 @@\n push:\n-    branches: [main]\n+    branches: ['**']",
+                      "@@ -1,0 +1,3 @@\n+on:\n+  workflow_run:\n+    workflows: [CI]"]:
+            with self.subTest(patch):
+                self.assertIn("money", classify([f(".github/workflows/ci.yml", patch)])["tiers"])
 
     def test_workflow_with_unreadable_diff_is_money(self):
         r = classify([f(".github/workflows/big.yml", patch=None)])
@@ -118,7 +130,9 @@ class PathTable(unittest.TestCase):
         """Names that look like a rule but are not: the kill criterion is a classifier that
         labels half the PRs founder-tier, so these must not trip it."""
         for name in ["lib/screens/logout_button.dart", "src/Author.java", "src/hooks/useTimer.ts",
-                     "lib/models/pomodoro_session.dart", "docs/notes/tokens.md", "src/sessionTimer.ts"]:
+                     "lib/models/pomodoro_session.dart", "docs/notes/tokens.md", "src/sessionTimer.ts",
+                     "lib/screens/illegal_state.dart", "src/PatternTerms.kt", "src/main/java/dev/x/Tokenizer.java",
+                     "src/styles/tokens.css", "lib/catalog/authority_note.dart"]:
             with self.subTest(name):
                 self.assertEqual(classify([f(name)])["tiers"], ["none"])
 
@@ -173,12 +187,29 @@ class TidyingTest(unittest.TestCase):
                       "@@ -4 +3,0 @@\n-        XCTAssertEqual(a, b)",
                       "@@ -1 +1 @@\n-  assert result == 1\n+  assert result == 2",
                       "@@ -1 +1 @@\n+    expect(screen.getByText('Hi')).toBeVisible();",
-                      "@@ -1 +1 @@\n+    verify(repo).save(any());"]:
+                      "@@ -1 +1 @@\n+    verify(repo).save(any());",
+                      # forms the first version missed (review of #55)
+                      "@@ -7 +7 @@\n-            .isEqualTo(3);\n+            .isEqualTo(4);",
+                      "@@ -8 +8 @@\n-      equals(3),\n+      equals(4),",
+                      "@@ -3 +3 @@\n-    x shouldBe 3\n+    x shouldBe 4",
+                      "@@ -3 +3 @@\n-\tassert.Equal(t, 3, x)\n+\tassert.Equal(t, 4, x)",
+                      "@@ -3 +3 @@\n-\trequire.NoError(t, err)",
+                      "@@ -2 +2 @@\n-  @Test\n+  @Disabled @Test",
+                      "@@ -2 +2 @@\n-  test('adds', () => {\n+  test.skip('adds', () => {",
+                      "@@ -2 +2 @@\n-  it('adds', () => {\n+  xit('adds', () => {",
+                      "@@ -2 +2 @@\n-  test('adds', () {\n+  test('adds', skip: true, () {",
+                      "@@ -1,4 +0,0 @@\n-def test_adds():\n-    x = add(1, 1)\n-    y = x\n-",
+                      "@@ -1 +1 @@\n+@pytest.mark.skip(reason='flaky')"]:
             with self.subTest(patch):
                 r = classify([f("src/test/java/dev/x/AddTest.java", patch)])
                 self.assertEqual(r["tiers"], ["none"])
                 self.assertIn("needs-founder-review", r["labels"])
                 self.assertTrue(any("assertion" in x for x in r["feature"]))
+
+    def test_assertion_patterns_stay_inside_test_files(self):
+        """The wide patterns (`.isX(`, `test(`) apply to test files only."""
+        r = classify([f("lib/service/foo.dart", "@@ -1 +1 @@\n-  if (a.isEmpty()) {\n+  if (a.isNotEmpty()) {")])
+        self.assertEqual(r["labels"], ["tier:none"])
 
     def test_test_file_without_assertion_change_is_tidying(self):
         patch = "@@ -1,2 +1,2 @@\n-import dev.x.old.Foo;\n+import dev.x.service.Foo;"
@@ -259,7 +290,9 @@ class Rules(unittest.TestCase):
                  ("**/migrations/**", "migrations/1.sql", True), ("**/migrations/**", "a/b/migrations/c/1.sql", True),
                  ("**/migrations/**", "a/migrationsx/1.sql", False), ("pom.xml", "svc/pom.xml", True),
                  ("src/content/**", "web/src/content/a.md", False), ("src/**/*.md", "src/a.md", True),
-                 ("src/**/*.md", "src/x/y/a.md", True), ("*.test.*", "a/b.test.ts", True), ("*Test.java", "a/FooTest.java", True)]
+                 ("src/**/*.md", "src/x/y/a.md", True), ("*.test.*", "a/b.test.ts", True), ("*Test.java", "a/FooTest.java", True),
+                 ("*auth[!o]*", "AuthService.java", True), ("*auth[!o]*", "Author.java", False),
+                 ("*auth[!o]*", "x/auth/y", False), ("v[0-9]*", "v2.txt", True), ("v[0-9]*", "va.txt", False)]
         for pat, path, want in cases:
             with self.subTest((pat, path)):
                 self.assertEqual(T["matches"]([rx(pat)], path), want)
@@ -278,7 +311,8 @@ class FakeApi:
             return 500, b"boom"
         if method == "GET" and path.endswith("/pulls/7"):
             return 200, json.dumps({"body": self.body, "labels": [{"name": n} for n in self.labels],
-                                    "base": {"sha": "abc"}, "changed_files": self.changed}).encode()
+                                    "base": {"sha": "abc"}, "head": {"sha": "def"},
+                                    "changed_files": self.changed}).encode()
         if method == "GET" and "/contents/.github/founder-tier.yml?ref=abc" in path:
             return (200, self.ext.encode()) if self.ext else (404, b"")
         if method == "GET" and "/pulls/7/files" in path:
@@ -289,8 +323,13 @@ class FakeApi:
         if method == "POST" and path.endswith("/issues/7/labels"):
             self.labels += data["labels"]
             return 200, b"[]"
+        if method == "POST" and path.endswith("/statuses/def"):
+            self.status = data
+            return 201, b"{}"
         if method == "DELETE":
             name = path.rsplit("/", 1)[-1].replace("%3A", ":")
+            if name not in self.labels:
+                return 404, b""
             self.labels.remove(name)
             return 200, b""
         return 404, b""
@@ -318,6 +357,8 @@ class Main(unittest.TestCase):
         api = FakeApi([f(".github/workflows/ci.yml")], labels=["tier:none", "claude-review", "tier:public"])
         self.assertEqual(run_main(api, env()), 0)
         self.assertEqual(sorted(api.labels), ["claude-review", "needs-founder-review", "tier:security"])
+        self.assertEqual(api.status["context"], "founder-tier/classified")
+        self.assertEqual(api.status["description"], "tier:security, needs-founder-review")
 
     def test_tidying_removes_needs_founder_review(self):
         api = FakeApi([f("README.md")], labels=["needs-founder-review", "tier:security"])
@@ -339,8 +380,8 @@ class Main(unittest.TestCase):
     def test_fail_safe_on_api_error(self):
         api = FakeApi([f("README.md")], labels=["tier:none"], fail="/files")
         self.assertEqual(run_main(api, env()), 1)
-        self.assertIn("needs-founder-review", api.labels)
-        self.assertIn("tier:security", api.labels)
+        self.assertEqual(sorted(api.labels), ["needs-founder-review", "tier:security"])
+        self.assertFalse(hasattr(api, "status"))            # no "classified" status on a failure
 
     def test_fail_safe_on_bad_extension(self):
         api = FakeApi([f("README.md")], ext="nonsense: here\n")
@@ -350,6 +391,7 @@ class Main(unittest.TestCase):
     def test_fail_safe_on_bad_pr_number(self):
         api = FakeApi([f("README.md")])
         self.assertEqual(run_main(api, env(PR="7; rm -rf /")), 1)
+        self.assertEqual(api.calls, [])                     # nothing is built from an unchecked number
 
     def test_summary_written(self):
         import tempfile, os
@@ -360,6 +402,7 @@ class Main(unittest.TestCase):
             text = pathlib.Path(path).read_text(encoding="utf-8")
             self.assertIn("`tier:security`", text)
             self.assertIn("`pom.xml`", text)
+            self.assertIn("`def`", text)
         finally:
             os.unlink(path)
 

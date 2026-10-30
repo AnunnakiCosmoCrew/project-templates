@@ -73,9 +73,11 @@ name: Claude PR review
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, labeled]
-  # The founder-tier job only. Re-labels on every push and every body edit.
+  # The founder-tier job only. Re-labels on every push and body edit, and on every label
+  # change, so a removed `needs-founder-review` comes back. Labels the job itself sets with
+  # GITHUB_TOKEN start no run, so this cannot loop.
   pull_request_target:
-    types: [opened, reopened, synchronize, edited, ready_for_review]
+    types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
   workflow_dispatch:
     inputs:
       pr:
@@ -112,9 +114,13 @@ jobs:
   founder-tier:
     if: >-
       vars.FOUNDER_TIER_ENABLED != 'false' &&
-      (github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'pull_request_target' ||
+       (github.event_name == 'workflow_dispatch' &&
+        github.ref_name == github.event.repository.default_branch))
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # A manual run from another branch would run that branch's copy of the classifier with
+    # a write token, so dispatch classifies only from the default branch.
     # Two quick pushes: the newer run replaces the older, so the last word is the newest diff.
     concurrency:
       group: founder-tier-${{ github.event.pull_request.number || inputs.pr }}
@@ -123,6 +129,7 @@ jobs:
       contents: read          # .github/founder-tier.yml at the PR's base commit
       pull-requests: read     # the PR, its body and its files
       issues: write           # create the labels; add and remove them on the PR
+      statuses: write         # `founder-tier/classified` on the head commit that was read
     steps:
       # No checkout, on purpose: see FOUNDER TIER at the top. The PR number reaches the
       # script through env, never through `${{ }}` inside `run:`.
@@ -140,11 +147,25 @@ jobs:
               - managed-settings*.json
               - .githooks/**
               - .husky/**
+              - .pre-commit-config.yaml
+              - lefthook.yml
+              - lefthook.yaml
+              - .lefthook.yml
               - '**/auth/**'
               - '**/authentication/**'
               - '**/authorization/**'
               - '**/security/**'
               - '*auth.*'
+              - '*auth[!o]*'
+              - '*security*'
+              - '*tokenfilter*'
+              - '*tokenissuer*'
+              - '*tokenverifier*'
+              - '*tokenvalidator*'
+              - '*tokenservice*'
+              - '*tokenprovider*'
+              - '*apikey*'
+              - '*api_key*'
               - '*authenticat*'
               - '*authoriz*'
               - '*oauth*'
@@ -274,10 +295,16 @@ jobs:
               - '**/app-store/**'
               - '**/play-store/**'
               - '*privacy*'
-              - '*terms*'
-              - '*legal*'
-              - '*license*'
-              - '*licence*'
+              - terms*
+              - '*-terms*'
+              - '*_terms*'
+              - '**/terms/**'
+              - legal*
+              - '*-legal*'
+              - '*_legal*'
+              - '**/legal/**'
+              - license*
+              - licence*
               - '*kvkk*'
               - '*gdpr*'
               - '*impressum*'
@@ -348,12 +375,32 @@ jobs:
               - '\bshould\w*\s*[(.]'
               - '\bfail\s*\('
               - '\bpytest\.raises\b'
+              - '\b(assert|require)\.\w+\s*\('
+              - '\bshould[A-Z]\w*\b'
+              - '^\s*\.\w+\s*\('
+              - '\.(is|has|contains|matches|satisfies|extracting|isNot|doesNot)\w*\s*\('
+              - '\b(equals|equalTo|hasLength|hasSize|hasItems?|closeTo|greaterThan|lessThan|containsAll|orderedEquals|unorderedEquals|throwsA|completion|predicate)\s*\('
+              - '\b(isTrue|isFalse|isNull|isNotNull|isEmpty|isNotEmpty|returnsNormally)\b'
+              # skipping, disabling, adding or removing a test case changes what is asserted
+              - '@(Test|ParameterizedTest|Disabled|Ignore|Ignored|Tag)\b'
+              - '\b(test|it|describe|group|testWidgets|context|suite)\s*(\.\w+\s*)?\('
+              - '\b(xit|xdescribe|xtest|fit|fdescribe)\s*\('
+              - '\.(skip|only|todo)\b'
+              - '\bskip\s*:'
+              - '@pytest\.mark\.(skip|xfail)'
+              - '\bXCTSkip\w*'
+              - '\bdef test_\w+'
+              - '\bfunc test\w+'
+              - '\bfun `'
             # A changed line in a workflow file matching one of these adds the money tier
             # (new or changed schedule, runner or matrix). An unreadable diff counts too.
             workflow_files:
               - .github/workflows/**
             money_workflow_lines:
-              - '^\s*-?\s*(schedule|cron|runs-on|matrix)\s*:'
+              - '^\s*-?\s*(schedule|cron|runs-on|matrix|strategy|include|os|max-parallel|timeout-minutes)\s*:'
+              # triggers: a new event or a wider branch or path filter runs the job more often
+              - '^\s*-?\s*(on|push|pull_request|pull_request_target|workflow_run|merge_group|branches|branches-ignore|paths|paths-ignore|types)\s*:'
+              - '\b(ubuntu|macos|windows)-[\w.]+'
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
@@ -426,6 +473,12 @@ jobs:
                       out, i = out + "[^/]*", i + 1
                   elif p[i] == "?":
                       out, i = out + "[^/]", i + 1
+                  elif p[i] == "[" and "]" in p[i + 2:]:
+                      end = p.index("]", i + 2)
+                      body = p[i + 1:end]
+                      neg = body.startswith("!")
+                      chars = "".join("\\" + c if c in "\\^]" else c for c in (body[1:] if neg else body))
+                      out, i = out + ("[^/" + chars + "]" if neg else "[" + chars + "]"), end + 1
                   else:
                       out, i = out + re.escape(p[i]), i + 1
               return re.compile(out + r"\Z", re.I | re.S), name_only     # S: a newline in a name cannot dodge `**`
@@ -559,6 +612,7 @@ jobs:
               else:
                   out.append("- Tidying PR: tier none, no config change, no test assertion changed")
               out.append("- Added this run: " + (", ".join(added) or "nothing"))
+              out.append(f"- Head commit classified: `{result.get('head', '?')}`")
               return "\n".join(out) + "\n"
 
 
@@ -581,6 +635,12 @@ jobs:
                       break
               result = classify(files, pull.get("body"), rules, truncated=len(files) < pull.get("changed_files", 0))
               added = set_labels(api, repo, pr, [l["name"] for l in pull.get("labels", [])], result["labels"])
+              # Which head was read: a reader (emirer watch) treats a PR whose current head has
+              # no such status, or no `tier:` label, as unclassified, i.e. as a feature PR.
+              api.json("POST", f"/repos/{repo}/statuses/{pull['head']['sha']}",
+                       {"state": "success", "context": "founder-tier/classified",
+                        "description": ", ".join(result["labels"])[:140]})
+              result["head"] = pull["head"]["sha"]
               return result, added
 
 
@@ -591,8 +651,11 @@ jobs:
                   result, added = run(api, repo, pr, env.get("TIER_RULES", ""))
               except Exception as e:
                   print(f"::error::founder tier: {e}. Labelling fail-safe: {', '.join(FAIL_SAFE)}")
+                  if not re.fullmatch(r"[0-9]+", pr or "") or not re.fullmatch(r"[\w.-]+/[\w.-]+", repo or ""):
+                      print("::error::no valid PR number or repo; no label set")
+                      return 1
                   try:
-                      set_labels(api, repo, pr, [], list(FAIL_SAFE))
+                      set_labels(api, repo, pr, ["tier:none"], list(FAIL_SAFE))
                   except Exception as e2:
                       print(f"::error::fail-safe labels not set either: {e2}")
                   return 1
