@@ -184,7 +184,7 @@ These rules exist because an implementing agent accepts the premise it is handed
 
 5. **Stop and ask when the premise looks wrong.** If, while reading the code, the issue's stated problem does not exist, is already fixed, has a cheaper fix than the one requested, or would require changing something the issue did not mention, do not implement. Push the branch, label the issue `needs-decision`, and post a comment whose first line is `<!-- needs-decision --> @mertyertugrul <one-sentence question>`, followed by what you observed, the options, and your recommended option. Then stop. An issue whose premise is wrong is a decision, not a task.
 
-6. **Never weaken a test to pass.** Do not add `@Disabled`, `@Ignore`, `assumeTrue(false)`, broadened assertions, deleted assertions, lowered thresholds or widened timeouts to make CI green. If a test is wrong, say so under "What was not verified" and ask. Keep structural changes (refactoring, renames, moves) and behavioural changes in separate commits, and in separate PRs when both are more than trivial.
+6. **Never weaken a test to pass.** Do not add `@Disabled`, `@Ignore`, `assumeTrue(false)`, broadened assertions, deleted assertions, lowered thresholds or widened timeouts to make CI green. If a test is wrong, say so under `Not verified` and ask. Keep structural changes (refactoring, renames, moves) and behavioural changes in separate commits, and in separate PRs when both are more than trivial.
 
 7. **State what was verified and what was not.** The PR body ends with two headed lists:
    - `Verified`: each claim with the command you ran and its output, or the test name, or the file and line. "All tests pass" alone is not evidence.
@@ -194,8 +194,10 @@ These rules exist because an implementing agent accepts the premise it is handed
 
 9. **Keep PRs readable in one sitting.** One issue, one PR. If the diff grows past what a reviewer can read in about an hour, split it and say so.
 
-<!-- Rule 4 lists the guardrail files of the Java/Spring Boot repos. Adapt the list to this repo's
-     own guardrails (lint config, frozen fixtures, coverage thresholds, CI workflows). -->
+<!-- Rules 4 and 6 use the examples of the Java/Spring Boot repos (archunit.properties, pom.xml, pmd-tests.xml,
+     @Disabled, @Ignore). Adapt both lists to this repo's stack: its guardrail files (lint config, frozen
+     fixtures, coverage thresholds) and its way of skipping a test. The ban on editing .github/workflows/ applies
+     to feature PRs in an adopting repo; a PR whose issue is about the workflows themselves is exempt. -->
 
 ## Project Management
 
