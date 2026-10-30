@@ -153,6 +153,7 @@ Two files carry the decision discipline of luvita-docs ADRs [0005](https://githu
 | --- | --- | --- |
 | [`ADR.template.md`](ADR.template.md) | each repo's ADR folder as `NNNN-slug.md`: `adr/` in the docs repos and sites, `docs/decisions/` in code repos (`Pelerin/docs/decisions`) | Fields 1 to 8 may be drafted by the planner. Field 9 (who challenged it) is filled from the critic's report and the founder, never by the planner. |
 | [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` will look for it (ADR 0005 §1; not implemented yet, tracked separately). The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the italic note and the four `- **...:**` premise bullets. |
+
 ## Founder tier labels (ADR 0007)
 
 The `founder-tier` job in [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) decides, from the diff and not from the PR's author, whether the founder reads a PR ([luvita-docs ADR 0007](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0007-feature-pr-review-and-deterministic-tiering.md) §1 and §2). It runs on every push, body edit and label change, reads `pulls/N/files` and the body over REST, and sets:
