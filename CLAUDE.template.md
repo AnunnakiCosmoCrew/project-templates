@@ -170,6 +170,33 @@ Multiple Claude Code agents may work on this repo concurrently. To prevent files
 - **Auto-cleanup**: `~/.claude/scripts/prune-worktrees.sh` (installed from the private `emirers` repo) runs on every `SessionStart` via `prune-current-worktrees.sh` and removes a worktree only when its tree is clean **and** a merged PR contains its HEAD (or it is already on `main`). Dirty trees, unpushed commits and closed-unmerged PRs are left alone, so commit and push before ending a session. Log: `~/.claude/logs/prune-worktrees.log`.
 - **Rules**: one worktree per feature branch; one feature branch per issue; never `.claude/worktrees/` or `.worktrees/`; if you're editing in the root clone, stop and create a worktree first.
 
+## Decision discipline
+
+These rules exist because an implementing agent accepts the premise it is handed and tends to add what was not asked for. They are not about code quality. They are about keeping the founder's decision the only decision in the PR.
+
+1. **Implement only what the issue specifies.** The issue's acceptance criteria are the scope. A "reasonable next step" that is not in the issue is out of scope. If you think it is needed, say so in the PR body under "Unrequested design choices" and leave it out of the diff, or open a new issue in Backlog.
+
+2. **Name every unrequested design choice.** Every choice the issue did not specify (a new class, a new package, a pattern, a library, a changed API shape, a changed default, a schema change) goes in the PR body in a section titled `Unrequested design choices`, placed directly under the existing `Founder check:` line, one bullet each, with the simplest alternative you rejected and why. An empty section reads `Unrequested design choices: none`.
+
+3. **No new abstractions, modules or dependencies without an ADR reference.** A new module, a new layer, a new cross-cutting abstraction, a new runtime dependency or a new build plugin needs an existing ADR that permits it. Cite it as `ADR: adr/NNNN` in the PR body. If no ADR covers it, stop and ask (rule 5). Do not write the ADR yourself inside an implementation PR.
+
+4. **Do not touch the guardrails.** Never edit `archunit.properties`, `src/test/resources/frozen/**`, `config/pmd-tests.xml`, mutation or coverage thresholds in `pom.xml`, or anything under `.github/workflows/` as part of a feature PR. If a guardrail blocks you, that is the signal that the change needs a decision, not a config edit. Ask (rule 5).
+
+5. **Stop and ask when the premise looks wrong.** If, while reading the code, the issue's stated problem does not exist, is already fixed, has a cheaper fix than the one requested, or would require changing something the issue did not mention, do not implement. Push the branch, label the issue `needs-decision`, and post a comment whose first line is `<!-- needs-decision --> @mertyertugrul <one-sentence question>`, followed by what you observed, the options, and your recommended option. Then stop. An issue whose premise is wrong is a decision, not a task.
+
+6. **Never weaken a test to pass.** Do not add `@Disabled`, `@Ignore`, `assumeTrue(false)`, broadened assertions, deleted assertions, lowered thresholds or widened timeouts to make CI green. If a test is wrong, say so under "What was not verified" and ask. Keep structural changes (refactoring, renames, moves) and behavioural changes in separate commits, and in separate PRs when both are more than trivial.
+
+7. **State what was verified and what was not.** The PR body ends with two headed lists:
+   - `Verified`: each claim with the command you ran and its output, or the test name, or the file and line. "All tests pass" alone is not evidence.
+   - `Not verified`: everything you could not run, reproduce, benchmark or test in this environment, including performance claims. If you could not build a reproducer, say so.
+
+8. **Tiering is not yours to lower.** Fill the `Founder check:` line honestly. CI classifies the tier from the diff; your line can raise the tier, never lower it. If you are unsure whether something is `irreversible`, `money`, `public`, `security` or `product`, mark it.
+
+9. **Keep PRs readable in one sitting.** One issue, one PR. If the diff grows past what a reviewer can read in about an hour, split it and say so.
+
+<!-- Rule 4 lists the guardrail files of the Java/Spring Boot repos. Adapt the list to this repo's
+     own guardrails (lint config, frozen fixtures, coverage thresholds, CI workflows). -->
+
 ## Project Management
 
 - **Project board**: GitHub Projects board #{{PROJECT_BOARD_NUMBER}} (`{{REPO_OWNER}}` org)
