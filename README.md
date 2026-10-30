@@ -7,6 +7,7 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | File | What it does |
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
+| [`brand/BRAND.md`](brand/BRAND.md) | Public-safe Luvita brand, attribution and copy rules. Site `CLAUDE.md` files and `brand-rules.json` `$comment` fields point here; agents read it live. Written by the founder from the private company reference, which must change with it. |
 | [`skill-templates/`](skill-templates) | Parameterized `issue-start` + `pr-open` skills, scaffolded per repo by `install-workflow.sh`. |
 | [`global/`](global) | Canonical copy of the one generic machine-global asset left here: the `/resolve-copilot` command. The `worktree` skill, the `prune-*` scripts, the hooks and the other fleet scripts live in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003) and are installed by its `install.sh`. |
 | [`scripts/install-workflow.sh`](scripts/install-workflow.sh) | Stamps the per-project workflow skills (`issue-start`, `pr-open`) into a repo, substituting placeholders. |
