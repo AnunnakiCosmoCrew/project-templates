@@ -7,6 +7,8 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | File | What it does |
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
+| [`ADR.template.md`](ADR.template.md) | Canonical ADR template (luvita-docs ADR 0006): problem, evidence, dated success metric, alternatives, decision, kill criteria, reversibility, consequences, who challenged it. House header (`# ADR NNNN: Title`, `- Status:` / `- Date:` / `- Tier:` bullets, no front matter). |
+| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | Canonical GitHub issue template (luvita-docs ADR 0005 §1): the founder's `## Premise check` block, scope, verification plan and Todo gate. |
 | [`brand/BRAND.md`](brand/BRAND.md) | Public-safe Luvita brand, attribution and copy rules. Site `CLAUDE.md` files and `brand-rules.json` `$comment` fields point here; agents read it live. Written by the founder from the private company reference, which must change with it. |
 | [`skill-templates/`](skill-templates) | Parameterized `issue-start` + `pr-open` skills, scaffolded per repo by `install-workflow.sh`. |
 | [`global/`](global) | Canonical copy of the one generic machine-global asset left here: the `/resolve-copilot` command. The `worktree` skill, the `prune-*` scripts, the hooks and the other fleet scripts live in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003) and are installed by its `install.sh`. |
@@ -143,6 +145,15 @@ second argument is the `name:` of that repo's PR check workflow, which differs p
 The canonical file carries a `{{PR_CHECK_WORKFLOW}}` placeholder the script fills in.
 Leave the name out and the script reuses the one in an already-installed copy, or picks
 the repo's only `pull_request` workflow. If there are several, it lists them and stops.
+
+## Decision templates (ADR and issue)
+
+Two files carry the decision discipline of luvita-docs ADRs [0005](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0005-plan-gate-premise-check-and-plan-critic.md) and [0006](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0006-adr-template-with-evidence-and-kill-criteria.md). Both come from artifacts 4(c) and 4(d) of the [decision-discipline memo](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/strategy/2026-10-decision-discipline-research.md). Copy them; they are not auto-applied.
+
+| Template | Copy to | Notes |
+| --- | --- | --- |
+| [`ADR.template.md`](ADR.template.md) | each repo's ADR folder as `NNNN-slug.md`: `adr/` in the docs repos and sites, `docs/decisions/` in code repos (`Pelerin/docs/decisions`) | Fields 1 to 8 may be drafted by the planner. Field 9 (who challenged it) is filled from the critic's report and the founder, never by the planner. |
+| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` will look for it (ADR 0005 §1; not implemented yet, tracked separately). The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the italic note and the four `- **...:**` premise bullets. |
 
 ## Founder tier labels (ADR 0007)
 
@@ -293,6 +304,7 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 ## Version history
 
 - **2026-10-30** — `claude-pr-review.yml` gains the `founder-tier` job (ADR 0007, [#52](https://github.com/AnunnakiCosmoCrew/project-templates/issues/52)): `tier:*` and `needs-founder-review` labels from the diff, on `pull_request_target`; the review job ignores that event. Re-run `install-claude-review-workflow.sh` in each consumer to pick it up.
+- **2026-10-30** — Added `ADR.template.md` and `ISSUE_TEMPLATE/task.md` (luvita-docs ADRs 0005 §1 and 0006; [#50](https://github.com/AnunnakiCosmoCrew/project-templates/issues/50)). `CLAUDE.template.md` points at the ADR template. Repos pick the files up by copying them.
 - **2026-10-28** — `skills/` added: pinned `frontend-design` (anthropics/skills) and `preview-check`, plus `scripts/install-skills.sh` ([#46](https://github.com/AnunnakiCosmoCrew/project-templates/issues/46)).
 - **2026-10-08** — `bug-needs-test.yml` skips its job (job-level `if:`) on PRs that are not bug PRs, so they and their `labeled` / `unlabeled` events for unrelated labels no longer start a billed runner ([#32](https://github.com/AnunnakiCosmoCrew/project-templates/issues/32)). Bug PRs still run on every event, because a skipped run under the same check name masks a red one (verified on a scratch PR). Re-run `install-bug-workflows.sh` in each consumer to pick it up.
 - **2026-10-07** — Added `bug-close-audit.yml` and `bug-needs-test.yml` as canonical workflows (W8, [#27](https://github.com/AnunnakiCosmoCrew/project-templates/issues/27)), ported from `WordPower-app` — the only repo enforcing "a linked PR is not proof of a fix" and "red reproducer before green fix" in CI, despite both rules being stated in ten `CLAUDE.md` files. `bug-needs-test.yml`'s Flutter/Gradle test paths became ecosystem-generic globs; both workflows' bug-label and issue-key-prefix are now `{{BUG_LABEL}}` / `{{ISSUE_KEY_PREFIX}}` placeholders, substituted by the new `install-bug-workflows.sh`, same approach as `{{PR_CHECK_WORKFLOW}}`. Added `scripts/test-install-bug-workflows.sh` and a new `actions-test.yml` CI workflow to run it (no `actionlint` yet — not previously used in this repo).
