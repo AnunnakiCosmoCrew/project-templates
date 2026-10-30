@@ -16,11 +16,13 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | [`workflows/resolve-copilot-comments.yml`](workflows/resolve-copilot-comments.yml) | Canonical "Resolve Copilot review comments" GitHub Actions workflow. When Copilot reviews a PR, Claude applies the valid fixes, pushes them, and resolves the threads. |
 | [`actions/brand-claim-check/`](actions/brand-claim-check) | Composite GitHub Action + stdlib Python script: greps a built site or a source tree against a per-repo `brand-rules.json` (banned / required patterns, file presence, locale parity) and fails on violations. Its README has the schema and a copy-paste workflow. Unit-tested by `.github/workflows/actions-test.yml`. |
 | [`scripts/install-copilot-workflow.sh`](scripts/install-copilot-workflow.sh) | Copies the Copilot-resolve workflow into a repo's `.github/workflows/`, filling in the name of that repo's PR check workflow. Idempotent. |
-| [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Canonical "Claude PR review" workflow: reviews every same-repo PR with `claude-code-action`, authenticated with the Max subscription (`CLAUDE_CODE_OAUTH_TOKEN`). Advisory, never a required check. Replaces Copilot review. |
+| [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) | Canonical "Claude PR review" workflow: reviews every same-repo PR with `claude-code-action`, authenticated with the Max subscription (`CLAUDE_CODE_OAUTH_TOKEN`). Advisory, never a required check. Replaces Copilot review. Its `founder-tier` job labels every PR with its founder tier and, when it is a feature PR, `needs-founder-review` (see [Founder tier labels](#founder-tier-labels-adr-0007)). |
 | [`scripts/install-claude-review-workflow.sh`](scripts/install-claude-review-workflow.sh) | Copies the Claude review workflow into a repo's `.github/workflows/claude-review.yml`. Off until the repo sets `CLAUDE_REVIEW_ENABLED=true` and the token secret. Idempotent. |
 | [`workflows/bug-close-audit.yml`](workflows/bug-close-audit.yml) | Canonical "Bug close audit" workflow: reopens a bug issue closed without a qualifying commit on `main` in the 7 days after its last reopen. Always on (event-triggered on `issues: closed`), no opt-in switch. |
 | [`workflows/bug-needs-test.yml`](workflows/bug-needs-test.yml) | Canonical "Bug test coverage" workflow: a required check ("Bug PRs must add test lines") that blocks a bug-labelled PR with no added test lines, unless it carries `no-test-required`. |
 | [`.github/workflows/emirers-go.yml`](.github/workflows/emirers-go.yml) | The EmirErs `/go` **reusable workflow** (`workflow_call`): the founder's `/go` comment on an issue fires the repo's claude.ai routine at once. Every routine repo carries only a stub that calls it `@main` with its routine id and branch prefix (rendered by the private `emirers` repo's `scripts/go-workflow.py`), so a change here is live everywhere on merge. A continue run goes back to the routine it started on: an optional `routine_opus_id` input and `fire_token_opus` secret add the Opus routine, chosen by the `routine=` field of the newest `emirers-go-run` marker (github-actions[bot] only); new work stays on Sonnet. It lives here because a private repo's reusable workflows can only be called from private repos, and two routine repos are public. Tests: `tests/test_emirers_go_workflow.py`, run by `actions-test.yml`. |
+| [`skills/`](skills) | Skills copied verbatim into repos' `.claude/skills/`. `frontend-design` is vendored from anthropics/skills at the SHA in its `UPSTREAM` file (byte-identical, `LICENSE.txt` kept); `preview-check` is Luvita-written (screenshots and console check for UI changes). |
+| [`scripts/install-skills.sh`](scripts/install-skills.sh) | `install-skills.sh <repo-dir> <skill>...` copies those skills into `<repo-dir>/.claude/skills/<skill>/`. No-op when identical, non-zero exit on an unknown skill. Check it with `scripts/test-install-skills.sh`. |
 | [`scripts/install-bug-workflows.sh`](scripts/install-bug-workflows.sh) | Copies both bug workflows into a repo's `.github/workflows/`, substituting that repo's issue-key prefix and bug-label name. Idempotent. |
 
 ## The contract
@@ -142,6 +144,26 @@ The canonical file carries a `{{PR_CHECK_WORKFLOW}}` placeholder the script fill
 Leave the name out and the script reuses the one in an already-installed copy, or picks
 the repo's only `pull_request` workflow. If there are several, it lists them and stops.
 
+## Founder tier labels (ADR 0007)
+
+The `founder-tier` job in [`workflows/claude-pr-review.yml`](workflows/claude-pr-review.yml) decides, from the diff and not from the PR's author, whether the founder reads a PR ([luvita-docs ADR 0007](https://github.com/AnunnakiCosmoCrew/luvita-docs/blob/main/adr/0007-feature-pr-review-and-deterministic-tiering.md) §1 and §2). It runs on every push, body edit and label change, reads `pulls/N/files` and the body over REST, and sets:
+
+| Label | Meaning |
+| --- | --- |
+| `tier:security`, `tier:irreversible`, `tier:money`, `tier:public` | The diff touches a path in that row of the ADR table (the `TIER_RULES` block at the top of the step), or the body's `Founder check:` line names it. One label per tier found. |
+| `tier:product` | The `Founder check:` line says `product`, names no known tier, or is missing (founder-tier, as in ADR 0004). Paths cannot detect it. |
+| `tier:none` | No tier from either source. |
+| `needs-founder-review` | A feature PR: anything not provably tidying. Tidying means tier `none`, no config file changed, and no test assertion line added, changed or removed. `emirer watch` reads this label and requests the founder's review ([emirers#156](https://github.com/AnunnakiCosmoCrew/emirers/issues/156)). |
+
+The `Founder check:` line can raise the tier, never lower it. Stale `tier:*` labels are removed, and `needs-founder-review` is removed when a later push makes the PR tidying. The label means "feature PR", not "review pending": removing it by hand starts a run that puts it back. Each successful run also sets the commit status `founder-tier/classified` (description: the labels) on the head commit it read, so a reader can tell a stale or missing classification from a tidying one: treat a PR whose current head has no such status, or no `tier:` label, as a feature PR. The run's summary lists the files behind each label.
+
+- **Why `pull_request_target`:** GitHub then runs the default branch's copy of the file, so a PR cannot edit the classifier that labels it. That is safe only because the job checks out and runs nothing from the PR. A newly installed or changed copy therefore takes effect after it merges.
+- **Extending the rules:** commit `.github/founder-tier.yml` on the default branch, in the same shape as `TIER_RULES` (keys: the four tiers, `not_tidying`, `test_files`, `assertion_lines`, `workflow_files`, `money_workflow_lines`). Entries are added to the built-in lists, never replace them, and the file is read from the PR's base commit. This repo's own copy makes `workflows/**`, `actions/**` and the other synced templates security tier. An unknown key or unreadable line is an error.
+- **Fail-safe:** any error (API, bad rules file) labels `needs-founder-review` and `tier:security`, removes `tier:none`, sets no `classified` status, and the job goes red. It is not a required check, but `git-guard.py` refuses `gh pr merge` while any check is red, so a failed run blocks the merge until it is re-run (`gh run rerun <id> --failed`). An invalid PR number sets nothing.
+- **Manual run:** `workflow_dispatch` classifies only when started from the default branch; from any other ref the job is skipped, since that ref's copy of the classifier would run with a write token.
+- **Off switch:** `gh variable set FOUNDER_TIER_ENABLED --body false --repo <owner>/<repo>`. It does not depend on `CLAUDE_REVIEW_ENABLED` or the review token; it needs only `GITHUB_TOKEN` (`issues: write` to create the labels, `pull-requests: write` to set them on the PR: `issues: write` alone gets HTTP 403 on a pull request; `statuses: write` for the status).
+- **Tests:** `tests/test_founder_tier.py` runs the script straight from the workflow file (one case per row of the table, the `Founder check:` rules, the tidying test, extension, fail-safe); `actions-test.yml` runs it.
+
 ## Bug workflows: close audit + test coverage (code repos)
 
 Two workflows, ported from `WordPower-app` (the first repo to carry them) and
@@ -229,6 +251,23 @@ git push -u origin feature/nt-1-bootstrap
 gh pr create --title "NT-1 chore: bootstrap workflow files" --body "Closes #1" --reviewer @copilot
 ```
 
+## Shared skills and upgrades
+
+`skills/frontend-design` is a pinned, unedited copy of [anthropics/skills](https://github.com/anthropics/skills); its `UPSTREAM` file holds the repo URL and commit SHA. Luvita-specific notes about it go in each repo's `CLAUDE.md`, never in the vendored `SKILL.md`.
+
+Install into a repo, then commit the result in a PR there:
+
+```bash
+./scripts/install-skills.sh <repo-dir> frontend-design preview-check
+```
+
+To take a new upstream version:
+
+1. In one PR here, replace `skills/frontend-design/` with the upstream files at the new commit (byte-identical) and bump the SHA in `UPSTREAM`.
+2. After it merges, re-run `install-skills.sh` against each adopting repo and open a PR there with the result.
+
+`preview-check` needs no CI job and no Playwright dependency: it uses the preinstalled Chromium in `/opt/pw-browsers`.
+
 ## Maintaining the templates
 
 When the conventions evolve (new field, new workflow step, etc.):
@@ -253,6 +292,8 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 
 ## Version history
 
+- **2026-10-30** — `claude-pr-review.yml` gains the `founder-tier` job (ADR 0007, [#52](https://github.com/AnunnakiCosmoCrew/project-templates/issues/52)): `tier:*` and `needs-founder-review` labels from the diff, on `pull_request_target`; the review job ignores that event. Re-run `install-claude-review-workflow.sh` in each consumer to pick it up.
+- **2026-10-28** — `skills/` added: pinned `frontend-design` (anthropics/skills) and `preview-check`, plus `scripts/install-skills.sh` ([#46](https://github.com/AnunnakiCosmoCrew/project-templates/issues/46)).
 - **2026-10-08** — `bug-needs-test.yml` skips its job (job-level `if:`) on PRs that are not bug PRs, so they and their `labeled` / `unlabeled` events for unrelated labels no longer start a billed runner ([#32](https://github.com/AnunnakiCosmoCrew/project-templates/issues/32)). Bug PRs still run on every event, because a skipped run under the same check name masks a red one (verified on a scratch PR). Re-run `install-bug-workflows.sh` in each consumer to pick it up.
 - **2026-10-07** — Added `bug-close-audit.yml` and `bug-needs-test.yml` as canonical workflows (W8, [#27](https://github.com/AnunnakiCosmoCrew/project-templates/issues/27)), ported from `WordPower-app` — the only repo enforcing "a linked PR is not proof of a fix" and "red reproducer before green fix" in CI, despite both rules being stated in ten `CLAUDE.md` files. `bug-needs-test.yml`'s Flutter/Gradle test paths became ecosystem-generic globs; both workflows' bug-label and issue-key-prefix are now `{{BUG_LABEL}}` / `{{ISSUE_KEY_PREFIX}}` placeholders, substituted by the new `install-bug-workflows.sh`, same approach as `{{PR_CHECK_WORKFLOW}}`. Added `scripts/test-install-bug-workflows.sh` and a new `actions-test.yml` CI workflow to run it (no `actionlint` yet — not previously used in this repo).
 - **2026-10-07** — Brought the templates in line with how the org works now. The contract names the real barriers: the `main-protection` ruleset (PR required, threads resolved, linear history, required checks) and the `git-guard.py` hook from `emirers`, installed through managed settings. Native "Blocked by" links are the source of truth for dependencies, `Dependent` is only a readable mirror (`#N` same-repo, `owner/repo#N` cross-repo), and `issue-start` now looks the blockers up before it touches the board and stops on an open one. `Model & Effort` uses the `Model · tier (reason)` format with current models. `pr-open` documents the merge safeguards. The fresh-repo bootstrap seeds `main` (`--add-readme`), clones, and opens the bootstrap PR from a branch that follows the repo's own prefix and issue-number convention. The `setup-project-board.sh` header was updated to match. Raised by Copilot review on #14.
