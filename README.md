@@ -152,7 +152,7 @@ Two files carry the decision discipline of luvita-docs ADRs [0005](https://githu
 | Template | Copy to | Notes |
 | --- | --- | --- |
 | [`ADR.template.md`](ADR.template.md) | each repo's ADR folder as `NNNN-slug.md`: `adr/` in the docs repos and sites, `docs/decisions/` in code repos (`Pelerin/docs/decisions`) | Fields 1 to 8 may be drafted by the planner. Field 9 (who challenged it) is filled from the critic's report and the founder, never by the planner. |
-| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` looks for it. The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the premise lines. |
+| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` will look for it (ADR 0005 §1; not implemented yet, tracked separately). The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the italic note and the four `- **...:**` premise bullets. |
 
 ## Bug workflows: close audit + test coverage (code repos)
 

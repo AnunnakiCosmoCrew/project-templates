@@ -17,7 +17,7 @@ _Founder fills this before Status moves to Todo._
 - [ ] Acceptance criteria are listed below as testable statements
 - [ ] What is explicitly out of scope is listed
 - [ ] The simplest alternative (including "do nothing") is named and the reason it was rejected is one sentence
-- [ ] Any new module, abstraction, dependency, schema change or public API change cites an ADR: `ADR: adr/NNNN` (or the issue is Blocked until one exists)
+- [ ] Any new module, abstraction, dependency, schema change or public API change cites an ADR: `ADR: <path to the ADR file, e.g. adr/NNNN or docs/decisions/NNNN>` (or the issue is Blocked until one exists)
 - [ ] Tier, if any: irreversible | money | public | security | product
 
 ## Verification plan
