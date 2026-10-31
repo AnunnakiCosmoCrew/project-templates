@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 ## Premise check
-_Whoever opens the issue fills this (luvita-docs ADR 0005, amendment 1). An agent replaces this line with: Written by an agent (<session or PR link>); the founder's move to Todo signs it off._
+_Whoever opens the issue fills this (luvita-docs ADR 0005, amendment 1). An agent replaces this line with `_Written by an agent (<session or PR link>); the founder's move to Todo signs it off._`_
 - **Observed problem:** <what happened, where, when; a link or log line if one exists>
 - **Evidence it exists:** <link, metric, message, test; or "assumed">
 - **Cost of doing nothing:** <one sentence>
