@@ -1,13 +1,13 @@
 ---
 name: Task
-about: A unit of work for an agent or a person, with the founder's premise check
+about: A unit of work for an agent or a person, with its premise check
 title: ''
 labels: ''
 assignees: ''
 ---
 
 ## Premise check
-_Founder fills this before Status moves to Todo._
+_Whoever opens the issue fills this (luvita-docs ADR 0005, amendment 1). An agent replaces this line with `_Written by an agent (<session or PR link>); the founder's move to Todo signs it off._`_
 - **Observed problem:** <what happened, where, when; a link or log line if one exists>
 - **Evidence it exists:** <link, metric, message, test; or "assumed">
 - **Cost of doing nothing:** <one sentence>
@@ -27,7 +27,7 @@ _Founder fills this before Status moves to Todo._
 ## Gate
 - [ ] Estimate, Priority and Model & Effort are set
 - [ ] No open blocker (native Blocked-by links are clear)
-- [ ] Founder has moved this to Todo after filling the premise check
+- [ ] Founder has read the premise check and moved this to Todo (the sign-off)
 
 ## Acceptance criteria
 1. ...
