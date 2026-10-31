@@ -8,7 +8,7 @@ Templates and bootstrap tooling for new AnunnakiCosmoCrew projects. Apply these 
 | --- | --- |
 | [`CLAUDE.template.md`](CLAUDE.template.md) | Parameterized CLAUDE.md skeleton. Copy → fill placeholders → drop into the new repo as `CLAUDE.md`. |
 | [`ADR.template.md`](ADR.template.md) | Canonical ADR template (luvita-docs ADR 0006): problem, evidence, dated success metric, alternatives, decision, kill criteria, reversibility, consequences, who challenged it. House header (`# ADR NNNN: Title`, `- Status:` / `- Date:` / `- Tier:` bullets, no front matter). |
-| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | Canonical GitHub issue template (luvita-docs ADR 0005 §1): the founder's `## Premise check` block, scope, verification plan and Todo gate. |
+| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | Canonical GitHub issue template (luvita-docs ADR 0005 §1): the `## Premise check` block (written by the issue's opener since amendment 1), scope, verification plan and Todo gate. |
 | [`brand/BRAND.md`](brand/BRAND.md) | Public-safe Luvita brand, attribution and copy rules. Site `CLAUDE.md` files and `brand-rules.json` `$comment` fields point here; agents read it live. Written by the founder from the private company reference, which must change with it. |
 | [`skill-templates/`](skill-templates) | Parameterized `issue-start` + `pr-open` skills, scaffolded per repo by `install-workflow.sh`. |
 | [`global/`](global) | Canonical copy of the one generic machine-global asset left here: the `/resolve-copilot` command. The `worktree` skill, the `prune-*` scripts, the hooks and the other fleet scripts live in the private `emirers` repo since 2026-10-06 (luvita-docs ADR 0003) and are installed by its `install.sh`. |
@@ -153,7 +153,7 @@ Two files carry the decision discipline of luvita-docs ADRs [0005](https://githu
 | Template | Copy to | Notes |
 | --- | --- | --- |
 | [`ADR.template.md`](ADR.template.md) | each repo's ADR folder as `NNNN-slug.md`: `adr/` in the docs repos and sites, `docs/decisions/` in code repos (`Pelerin/docs/decisions`) | Fields 1 to 8 may be drafted by the planner. Field 9 (who challenged it) is filled from the critic's report and the founder, never by the planner. |
-| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` will look for it (ADR 0005 §1; not implemented yet, tracked separately). The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the italic note and the four `- **...:**` premise bullets. |
+| [`ISSUE_TEMPLATE/task.md`](ISSUE_TEMPLATE/task.md) | `.github/ISSUE_TEMPLATE/task.md` in each repo | The `## Premise check` heading must stay exactly as written: `emirer watch` parses it (ADR 0005 §1, emirers EM-156) and never dispatches an issue whose block is missing or empty. Whoever opens the issue fills it, an agent included (amendment 1); the founder's move to Todo is the sign-off. The memo's sub-headings are promoted to `##` so a parser that reads "until the next `##`" sees only the italic note and the four `- **...:**` premise bullets. |
 
 ## Founder tier labels (ADR 0007)
 
