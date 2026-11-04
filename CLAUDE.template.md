@@ -165,6 +165,14 @@ Every new non-draft PR is reviewed by the Claude PR review workflow (`.github/wo
 - The review runs once per PR, not per push. To get a fresh review (or one on a PR opened before the workflow existed), add the `claude-review` label. Never add a polling or nudge cron for it.
 <!-- /OPTIONAL -->
 
+## Accessibility
+
+Standard and check follow luvita-docs ADR 0011 §5.1. Delete this section if the repo renders nothing a person uses.
+
+- **Row of the table this repo follows:** {{A11Y_ROW}} (browser/web view: WCAG 2.2 AA; Flutter iOS/macOS: Apple HIG; Flutter Android: Material 3; Tauri shell: macOS HIG + Windows app design; native macOS: macOS HIG).
+- **Automated check (required CI):** {{A11Y_CHECK}} (web: `AnunnakiCosmoCrew/project-templates/actions/a11y-check@main` after the build step, job added to the ruleset's required checks; exceptions live in `.a11y-allow.json`, each with a reason).
+- **Last manual pass (screen reader / keyboard walk):** {{A11Y_LAST_MANUAL_PASS}}
+
 ## Agent Workflow
 
 Multiple Claude Code agents may work on this repo concurrently. To prevent filesystem conflicts, every agent **must** develop inside a dedicated `git worktree` — never directly in the main working directory.
