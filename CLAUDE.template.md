@@ -24,8 +24,9 @@ Placeholders (all required unless noted):
   {{WORKTREE_PREFIX}}         sibling worktree dir prefix, e.g., "wp", "sf-be", "sf-fe"
   {{COMMIT_PREFIX_EXAMPLE}}   e.g., "WP-42", "MAG-7"
   {{TECH_STACK_DESCRIPTION}}  one-paragraph stack summary
-  {{A11Y_SURFACE_AND_STANDARD}} / {{A11Y_AUTOMATED_CHECK}} / {{A11Y_MANUAL_PASS}} / {{A11Y_LAST_MANUAL_PASS_DATE}}
-                              the Accessibility section (ADR 0011 §5.1); see the FILL comments there
+  {{A11Y_SURFACE_AND_STANDARD}} / {{A11Y_AUTOMATED_CHECK}} / {{A11Y_MANUAL_PASS}} / {{A11Y_TOKEN_FILE}} / {{A11Y_LAST_MANUAL_PASS_DATE}}
+                              optional: omit all five with the Accessibility section (ADR 0011 §5.1);
+                              see the FILL comments there.
 ============================================================================
 -->
 
@@ -220,19 +221,20 @@ Canonical text: luvita-docs ADR 0011 §5.1. Every repo with a user interface fol
        "`XCUIApplication.performAccessibilityAudit()` in the smoke UI tests" (native macOS). -->
 - **Manual pass per release**: {{A11Y_MANUAL_PASS}}
   <!-- FILL: the assistive technology (VoiceOver, TalkBack, Narrator, keyboard only) and the main tasks walked. -->
+- **Colour token file**: {{A11Y_TOKEN_FILE}} <!-- FILL: path of the one file or package colours are read from (ADR 0011 §5.2), e.g. the vendored build of `cosmocrew-web/packages/design`. -->
 - **Last manual pass**: {{A11Y_LAST_MANUAL_PASS_DATE}} <!-- FILL: YYYY-MM-DD, or "never" until the first one is recorded. -->
 
 Definition of Done for any UI change:
 
 - The automated check above is green in required CI. Never silence it with an allow-list entry, a disabled rule or a lowered threshold to get green (rule 6 of Decision discipline); a documented exception is its own reviewed change.
-- Colours come from the token file and are not hard-coded anywhere else. Text keeps 4.5:1 contrast (3:1 for large text and UI components).
+- Text keeps 4.5:1 contrast (3:1 for large text and UI components).
 - A release that changes a main task updates **Last manual pass** above, or says in the PR body under `Not verified` that the pass is still owed.
 
 Implementation rules for new UI:
 
 - **Web widgets:** build on headless, APG-conformant primitives (Reka UI for Vue, Radix for React) or this repo's own primitives. Do not hand-roll ARIA for a dialog, menu, combobox, tabs or listbox.
 - **Flutter:** build on `material_ui` and `cupertino_ui`, and use the `.adaptive` constructors on Apple platforms (switches, sliders, dialogs, page transitions, icons, scroll physics).
-- **No hard-coded colours** outside the token file.
+- **No hard-coded colours** outside the colour token file named above.
 
 ## Project Management
 
