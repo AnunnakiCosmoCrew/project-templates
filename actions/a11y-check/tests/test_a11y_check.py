@@ -73,6 +73,14 @@ class AllowlistTests(SiteCase):
         self.assertIsNone(a11y_check.is_allowed(e, "docs/a.html", "image-alt", "#f-1"))
 
 
+class GlobTests(unittest.TestCase):
+    def test_brackets_are_literal(self):
+        self.assertTrue(a11y_check.glob_match('input[type="email"]', 'input[type="email"]'))
+        self.assertFalse(a11y_check.glob_match('input[ab]', 'inputa'))
+        self.assertTrue(a11y_check.glob_match('#f-?', '#f-1'))
+        self.assertTrue(a11y_check.glob_match('.a *', '.a b c'))
+
+
 class EvaluateTests(unittest.TestCase):
     def test_only_serious_and_critical_block(self):
         res = [{"url": "http://h/p.html", "violations": [

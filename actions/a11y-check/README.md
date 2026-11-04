@@ -60,7 +60,7 @@ For a documented exception, e.g. a third-party widget you cannot change:
 ```
 
 - `rule` is the axe rule id, `selector` the CSS selector axe prints (shadow-DOM paths joined by
-  a space). `selector` and the optional `page` accept `*` / `?` globs.
+  a space). `selector` and the optional `page` accept `*` and `?` wildcards only (brackets are literal, so `input[type="email"]` works).
 - **An entry with an empty or missing `reason` fails the run** (exit 2). A reason is the point of
   the list.
 - An entry that matches nothing prints a warning so stale exceptions get removed.

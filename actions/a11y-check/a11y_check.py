@@ -9,11 +9,11 @@ Python 3.8+, standard library only. The browser side is @axe-core/cli, run with 
 See README.md for why that tool and that pin.
 """
 import argparse
-import fnmatch
 import functools
 import http.server
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -97,14 +97,20 @@ def load_allowlist(path):
     return entries
 
 
+def glob_match(pattern, text):
+    """Only * and ? are wildcards; brackets are literal, as in CSS attribute selectors."""
+    rx = "".join(".*" if c == "*" else "." if c == "?" else re.escape(c) for c in pattern)
+    return re.fullmatch(rx, text, re.DOTALL) is not None
+
+
 def is_allowed(entries, page, rule, selector):
     """Return the matching entry, or None. selector and page accept glob patterns."""
     for e in entries:
         if e["rule"] != rule:
             continue
-        if not fnmatch.fnmatchcase(selector, e["selector"]):
+        if not glob_match(e["selector"], selector):
             continue
-        if e.get("page") and not fnmatch.fnmatchcase(page, e["page"]):
+        if e.get("page") and not glob_match(e["page"], page):
             continue
         return e
     return None
