@@ -302,6 +302,10 @@ The first adopters, kept as history. By 2026-10 about twenty org repos carry the
 | SliceFocusFE | [`SliceFocusFE/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/SliceFocusFE/blob/main/CLAUDE.md) | [#8](https://github.com/orgs/AnunnakiCosmoCrew/projects/8) | 2026-06-27 (worktree workflow) |
 | Magpie | [`magpie-app-private/CLAUDE.md`](https://github.com/AnunnakiCosmoCrew/magpie-app-private/blob/main/CLAUDE.md) | [#12](https://github.com/orgs/AnunnakiCosmoCrew/projects/12) | 2026-05-12 |
 
+## Resyncing the Accessibility section
+
+`CLAUDE.template.md` carries the canonical `## Accessibility` section (luvita-docs ADR 0011 §5.1). A repo resyncs it whenever ADR 0011 changes: copy the section's text over, keep the repo's own filled values (surface, check, manual pass, date of the last pass), and open a PR there.
+
 ## Version history
 
 - **2026-11-04** — Added `actions/a11y-check` (ADR 0011 §5.3, [#67](https://github.com/AnunnakiCosmoCrew/project-templates/issues/67)) and an `## Accessibility` section in `CLAUDE.template.md` (§5.1). Repos adopt it by calling the action `@main` after their build.
