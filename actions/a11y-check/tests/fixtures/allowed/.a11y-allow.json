@@ -1,0 +1,6 @@
+{
+  "allow": [
+    {"rule": "image-alt", "selector": "#logo", "reason": "Fixture: image is decorative and covered by the allow-list test"},
+    {"rule": "label", "selector": "#email", "reason": "Fixture: field is labelled by a surrounding widget in the real app"}
+  ]
+}
