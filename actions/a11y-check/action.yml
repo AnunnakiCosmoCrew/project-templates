@@ -1,0 +1,64 @@
+name: Accessibility check (axe-core)
+description: >-
+  Serve a built site (or a plain-HTML repo root) on a local port, run axe-core on each page
+  at WCAG A/AA and fail on any serious or critical violation that is not on the reasoned
+  allow-list. Prints each violation with its page, selector and help URL.
+author: AnunnakiCosmoCrew
+branding:
+  icon: eye
+  color: purple
+
+inputs:
+  root:
+    description: Directory to serve, a built dist/ or the repo root for a plain-HTML site.
+    required: false
+    default: .
+  urls:
+    description: >-
+      Paths to test, relative to root, one per line or comma separated.
+      Empty means every .html file under root.
+    required: false
+    default: ""
+  allowlist:
+    description: >-
+      Allow-list JSON file. Looked up inside root first, then relative to the workspace.
+      A missing file means no exceptions.
+    required: false
+    default: .a11y-allow.json
+  standard:
+    description: One of wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa.
+    required: false
+    default: wcag22aa
+  python:
+    description: Python interpreter to run the check with (3.8+, standard library only).
+    required: false
+    default: python3
+
+outputs:
+  pages:
+    description: Number of pages tested.
+    value: ${{ steps.check.outputs.pages }}
+  violations:
+    description: Number of blocking (serious or critical) violations, allow-list applied.
+    value: ${{ steps.check.outputs.violations }}
+  allowed:
+    description: Number of violations skipped because they are on the allow-list.
+    value: ${{ steps.check.outputs.allowed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Accessibility check
+      id: check
+      shell: bash
+      env:
+        A11Y_ROOT: ${{ inputs.root }}
+        A11Y_URLS: ${{ inputs.urls }}
+        A11Y_ALLOWLIST: ${{ inputs.allowlist }}
+        A11Y_STANDARD: ${{ inputs.standard }}
+        A11Y_PYTHON: ${{ inputs.python }}
+      run: |
+        set -euo pipefail
+        "$A11Y_PYTHON" "${{ github.action_path }}/a11y_check.py" \
+          --root "$A11Y_ROOT" --urls "$A11Y_URLS" \
+          --allowlist "$A11Y_ALLOWLIST" --standard "$A11Y_STANDARD"

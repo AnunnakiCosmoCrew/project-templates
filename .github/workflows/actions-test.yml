@@ -26,6 +26,9 @@ jobs:
       - name: Unit tests (brand-claim-check)
         run: python3 -m unittest discover -s actions/brand-claim-check/tests -v
 
+      - name: Unit tests (a11y-check)
+        run: python3 -m unittest discover -s actions/a11y-check/tests -v
+
       # The EmirErs /go reusable workflow is live in every routine repo the moment it merges
       # (they call it @main), so its guarantees are checked here first; the Claude review
       # workflow's trigger and concurrency rules too, before its copies are rolled out (PT-43).
@@ -55,5 +58,44 @@ jobs:
           echo "outcome=$OUTCOME errors=$ERRORS warnings=$WARNINGS rules=$RULES"
           [ "$OUTCOME" = "failure" ] && [ "$ERRORS" = "7" ] && [ "$WARNINGS" = "2" ] && [ "$RULES" = "10" ] || {
             echo "::error::brand-claim-check did not report the fixture violations as expected"
+            exit 1
+          }
+
+      # a11y-check, end to end in a real browser against its own fixtures: one page that must
+      # pass, one built to fail (exact count, so a silent no-op cannot pass), one whose two
+      # violations are allow-listed with reasons.
+      - name: a11y-check passes the clean fixture
+        id: a11y_pass
+        uses: ./actions/a11y-check
+        with:
+          root: actions/a11y-check/tests/fixtures/pass
+
+      - name: a11y-check fails the violating fixture
+        id: a11y_fail
+        uses: ./actions/a11y-check
+        with:
+          root: actions/a11y-check/tests/fixtures/fail
+        continue-on-error: true
+
+      - name: a11y-check passes the allow-listed fixture
+        id: a11y_allowed
+        uses: ./actions/a11y-check
+        with:
+          root: actions/a11y-check/tests/fixtures/allowed
+
+      - name: Assert a11y-check results
+        env:
+          PASS_V: ${{ steps.a11y_pass.outputs.violations }}
+          PASS_PAGES: ${{ steps.a11y_pass.outputs.pages }}
+          FAIL_OUTCOME: ${{ steps.a11y_fail.outcome }}
+          FAIL_V: ${{ steps.a11y_fail.outputs.violations }}
+          ALLOWED_V: ${{ steps.a11y_allowed.outputs.violations }}
+          ALLOWED_N: ${{ steps.a11y_allowed.outputs.allowed }}
+        run: |
+          echo "pass: v=$PASS_V pages=$PASS_PAGES | fail: outcome=$FAIL_OUTCOME v=$FAIL_V | allowed: v=$ALLOWED_V n=$ALLOWED_N"
+          [ "$PASS_V" = "0" ] && [ "$PASS_PAGES" = "1" ] \
+            && [ "$FAIL_OUTCOME" = "failure" ] && [ "$FAIL_V" = "2" ] \
+            && [ "$ALLOWED_V" = "0" ] && [ "$ALLOWED_N" = "2" ] || {
+            echo "::error::a11y-check did not behave as the fixtures require"
             exit 1
           }
