@@ -134,6 +134,30 @@ class EndToEndWithFakeAxe(SiteCase):
         code, out = run("--root", self.tmp, "--urls", "nope.html")
         self.assertEqual(code, 2, out)
 
+    def test_urls_cannot_escape_root(self):
+        site = os.path.join(self.tmp, "site")
+        os.makedirs(site)
+        self.write("secret.html")
+        code, out = run("--root", site, "--urls", "../secret.html")
+        self.assertEqual(code, 2, out)
+        self.assertIn("inside root", out)
+
+    def test_page_with_space_matches_allow_list_page_glob(self):
+        res = [{"url": "http://h/my%20page.html", "violations": [
+            {"id": "label", "impact": "critical", "nodes": [{"target": ["#a"]}]}]}]
+        entries = [{"rule": "label", "selector": "#a", "reason": "r", "page": "my page.html"}]
+        findings, allowed, _ = a11y_check.evaluate(res, entries, "")
+        self.assertEqual((findings, len(allowed)), ([], 1))
+
+    def test_workflow_command_text_is_escaped(self):
+        self.assertEqual(a11y_check.esc("a%b\n::warning::x\r"), "a%25b%0A::warning::x%0D")
+
+    def test_timeout_and_missing_command_are_errors(self):
+        with self.assertRaises(a11y_check.CheckError):
+            a11y_check.run_axe([sys.executable, "-c", "import time; time.sleep(5)"], ["http://h/"], ["wcag2a"], None, timeout=1)
+        with self.assertRaises(a11y_check.CheckError):
+            a11y_check.run_axe(["/nonexistent/npx"], ["http://h/"], ["wcag2a"], None)
+
     def test_axe_failure_is_an_error_not_a_pass(self):
         self.write("index.html")
         out = io.StringIO()

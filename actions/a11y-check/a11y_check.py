@@ -38,6 +38,19 @@ class CheckError(Exception):
     """The check could not run (exit 2)."""
 
 
+def esc(text):
+    """Escape for a GitHub workflow command, which also keeps page-supplied text (selectors,
+    help, reasons) from starting a line of its own such as `::warning::`."""
+    return str(text).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def within_root(root, rel):
+    """True when rel, resolved (symlinks too), stays under root."""
+    base = os.path.realpath(root)
+    full = os.path.realpath(os.path.join(root, rel))
+    return full == base or full.startswith(base + os.sep)
+
+
 def discover_pages(root, urls):
     """Page paths (posix, relative to root, no leading slash) to test."""
     if urls:
@@ -105,7 +118,7 @@ def evaluate(results, entries, base_url):
     findings, allowed, used = [], [], set()
     for res in results:
         url = res.get("url", "")
-        page = urllib.parse.urlparse(url).path.lstrip("/") or "index.html"
+        page = urllib.parse.unquote(urllib.parse.urlparse(url).path).lstrip("/") or "index.html"
         for v in res.get("violations", []):
             if v.get("impact") not in BLOCKING:
                 continue
@@ -138,14 +151,22 @@ def serve(root):
     return server
 
 
-def run_axe(axe_cmd, urls, tags, chromedriver):
+def run_axe(axe_cmd, urls, tags, chromedriver, timeout=None):
     cmd = list(axe_cmd) + urls + [
         "--stdout", "--tags", ",".join(tags),
         "--chrome-options", "no-sandbox,disable-dev-shm-usage",
     ]
     if chromedriver:
         cmd += ["--chromedriver-path", chromedriver]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if timeout is None:
+        timeout = 600 + 60 * len(urls)  # npx download and browser start, then a minute per page
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise CheckError("axe did not finish within %d s (hung browser, driver or npx download)" % timeout)
+    except OSError as exc:
+        raise CheckError("cannot run %s: %s" % (cmd[0], exc))
     out = proc.stdout.strip()
     try:
         data = json.loads(out)
@@ -194,6 +215,9 @@ def main(argv=None):
         pages = discover_pages(root, urls)
         if not pages:
             raise CheckError("no .html pages under %s" % args.root)
+        outside = [p for p in pages if not within_root(root, p)]
+        if outside:
+            raise CheckError("pages must stay inside root %s: %s" % (args.root, ", ".join(outside)))
         missing = [p for p in pages if not os.path.isfile(os.path.join(root, p))]
         if missing:
             raise CheckError("pages not found under %s: %s" % (args.root, ", ".join(missing)))
@@ -213,17 +237,19 @@ def main(argv=None):
             server.shutdown()
         findings, allowed, used = evaluate(results, entries, base)
     except CheckError as exc:
-        print("::error::a11y-check could not run: %s" % exc)
+        print("::error::a11y-check could not run: %s" % esc(exc))
         write_output(pages=0, violations=0, allowed=0)
         return 2
 
     for i, e in enumerate(entries):
         if i not in used:
-            print("::warning::allow-list entry matched nothing and can be removed: %s %s" % (e["rule"], e["selector"]))
+            print("::warning::allow-list entry matched nothing and can be removed: %s %s" % (esc(e["rule"]), esc(e["selector"])))
     for a in allowed:
-        print("allowed   %s  %s  %s  (%s)" % (a["page"], a["rule"], a["selector"], a["reason"]))
+        print("allowed   %s  %s  %s  (%s)" % (esc(a["page"]), esc(a["rule"]), esc(a["selector"]), esc(a["reason"])))
     for f in findings:
-        print("::error file=%s::%s [%s] %s at %s" % (f["page"], f["rule"], f["impact"], f["help"], f["selector"]))
+        f = {k: esc(v) for k, v in f.items()}
+        print("::error file=%s::%s [%s] %s at %s" % (
+            f["page"].replace(":", "%3A").replace(",", "%2C"), f["rule"], f["impact"], f["help"], f["selector"]))
         print("VIOLATION %s  [%s] %s  %s\n          %s\n          %s" % (
             f["page"], f["impact"], f["rule"], f["selector"], f["help"], f["helpUrl"]))
     print("a11y-check: %d pages, standard %s, %d violations, %d allowed" % (
