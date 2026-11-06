@@ -1,10 +1,16 @@
 ---
 name: Task
-about: A unit of work for an agent or a person, with its premise check
+about: A unit of work for an agent or a person, with its plain-language summary and premise check
 title: ''
 labels: ''
 assignees: ''
 ---
+
+## In short
+_Three plain lines for the founder reading this cold in six months (luvita-docs ADR 0005, amendment 2). About 60 words; no file paths, function or flag names, or bare issue numbers; explain any internal name the first time. Delete this line._
+- **Why:** <the problem as an outcome: who is hurt and what it costs>
+- **What:** <what will be different when this is done>
+- **How:** <the approach, in one sentence>
 
 ## Premise check
 _Whoever opens the issue fills this (luvita-docs ADR 0005, amendment 1). An agent replaces this line with `_Written by an agent (<session or PR link>); the founder's move to Todo signs it off._`_
