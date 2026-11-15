@@ -12,9 +12,10 @@ file is the reason behind it.
 
 ## The company
 
-- **Luvita** is a software product company. It builds products and keeps them
-  running. It does not sell services, consultancy or team augmentation, and no
-  surface should suggest it does.
+- **Luvita** is a software product company ("yazılım ürünleri şirketi"). It
+  builds products and keeps them running. It does not sell services,
+  consultancy or team augmentation, and no surface should suggest it does.
+- Luvita is never called a "studio": the word reads as an agency.
 - The legal entity is **Luvita Teknoloji Enerji Yazılım Sanayi ve Ticaret
   Limited Şirketi**, Türkiye. It is the only copyright holder for every product
   below: never a brand, never a person.
@@ -34,10 +35,9 @@ file is the reason behind it.
 | **CosmoCrew** | Luvita's consumer-apps brand | cosmocrew.dev |
 | **SliceFocus** | CosmoCrew app: 24-hour radial planner with a focus timer | slicefocus.app, App Store |
 | **LexiPower** | CosmoCrew app: vocabulary notebook with spaced repetition | lexipower.app, App Store |
-| **With Handlebars** | CosmoCrew app: guitar chord and scale fretboard explorer | withhandlebars.com |
+| **With Handlebars** | CosmoCrew app: guitar chord and scale fretboard explorer | withhandlebars.com, App Store |
 | **Umay** | Luvita product, no intermediate brand | umayconnect.org |
 | **Nesili** | Luvita product, no intermediate brand | nesili.com |
-| **Luvi Engine** | Luvita product, no intermediate brand | none yet |
 
 Public product names, exactly as written:
 
@@ -67,8 +67,8 @@ CosmoCrew surfaces (the apps and cosmocrew.dev):
 - EN: `© <year> CosmoCrew — a brand of Luvita Teknoloji Ltd. Şti.`
 - TR: `© <year> CosmoCrew — Luvita Teknoloji Ltd. Şti. markasıdır.`
 
-Direct Luvita products (Umay, Nesili, Luvi Engine, and any future product with
-no intermediate brand):
+Direct Luvita products (Umay, Nesili, and any future product with no
+intermediate brand):
 
 - EN: `A Luvita product — Luvita Teknoloji Ltd. Şti.`
 - TR: `Bir Luvita ürünü — Luvita Teknoloji Ltd. Şti.`
@@ -93,8 +93,6 @@ Rules around the line:
   blocks.
 - The solar site may say it is a Luvita Teknoloji company and never links to
   luvita.tr.
-- luvita.tr may describe Luvi Engine as software. It never implies that Luvita
-  does solar installations.
 
 ## Address and location
 
@@ -107,7 +105,7 @@ Rules around the line:
   in a meta or social description. The city survives only in its JSON-LD
   address block.
 - No city in a hero anywhere. The company may move.
-- Registry numbers (MERSİS, VKN) belong on luvita.tr's identity page, not on
+- Registry numbers (MERSİS, trade registry number, VKN) belong on luvita.tr's identity page, not on
   product sites.
 
 ## Claims
@@ -144,8 +142,9 @@ easier, not unnecessary.
   hands.
 - State what things are and do. No definition by negation ("we are not a
   …", "no X, no Y" as a positioning line).
-- Hero line, as shipped: "Ürün geliştiriyoruz, yayında tutuyoruz." / "We build
-  products and keep them running."
+- Homepage hero, as shipped on luvita.tr: eyebrow "Bağımsız bir yazılım
+  laboratuvarı" / "An independent software laboratory", headline "Sıradaki on
+  yıl için yazılım." / "Software for the next decade."
 
 ### CosmoCrew
 
@@ -156,7 +155,8 @@ easier, not unnecessary.
 
 ### Headlines
 
-- An h1 needs a verb.
+- An h1 needs a verb. One approved exception: the luvita.tr homepage headline
+  above is a nameplate with no verb.
 - A definition ("X is a Y") goes at lead size, not in the h1.
 
 ### Turkish words we don't use
@@ -170,8 +170,8 @@ easier, not unnecessary.
 ## Where things are listed
 
 - luvita.tr lists and links every product and brand the company owns.
-- cosmocrew.dev lists only CosmoCrew apps. Umay, Nesili and Luvi Engine are
-  listed on luvita.tr, not there.
+- cosmocrew.dev lists only CosmoCrew apps. Umay and Nesili are listed on
+  luvita.tr, not there.
 
 ## Keeping this file current
 
