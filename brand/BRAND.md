@@ -148,11 +148,10 @@ easier, not unnecessary.
 
 ### CosmoCrew
 
-- Feel indie without saying it: avoid "small", "indie", "humble", "modest".
-- Ambition may be said outright.
+- Resilient ambition. Ambition may be said outright.
+- Avoid "small", "indie", "humble", "modest".
 - Don't lean on "studio"; prefer "the crew" or "we".
-- Homepage hero, as shipped on cosmocrew.dev: eyebrow "Relentless ambition",
-  headline "Calm, capable software, crafted to last."
+- Shipped line: "Calm, capable software, crafted to last."
 
 ### Headlines
 
