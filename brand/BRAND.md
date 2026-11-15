@@ -37,7 +37,6 @@ file is the reason behind it.
 | **With Handlebars** | CosmoCrew app: guitar chord and scale fretboard explorer | withhandlebars.com |
 | **Umay** | Luvita product, no intermediate brand | umayconnect.org |
 | **Nesili** | Luvita product, no intermediate brand | nesili.com |
-| **Luvi Engine** | Luvita product, no intermediate brand | none yet |
 
 Public product names, exactly as written:
 
@@ -67,8 +66,8 @@ CosmoCrew surfaces (the apps and cosmocrew.dev):
 - EN: `© <year> CosmoCrew — a brand of Luvita Teknoloji Ltd. Şti.`
 - TR: `© <year> CosmoCrew — Luvita Teknoloji Ltd. Şti. markasıdır.`
 
-Direct Luvita products (Umay, Nesili, Luvi Engine, and any future product with
-no intermediate brand):
+Direct Luvita products (Umay, Nesili, and any future product with no
+intermediate brand):
 
 - EN: `A Luvita product — Luvita Teknoloji Ltd. Şti.`
 - TR: `Bir Luvita ürünü — Luvita Teknoloji Ltd. Şti.`
@@ -93,8 +92,7 @@ Rules around the line:
   blocks.
 - The solar site may say it is a Luvita Teknoloji company and never links to
   luvita.tr.
-- luvita.tr may describe Luvi Engine as software. It never implies that Luvita
-  does solar installations.
+- luvita.tr never implies that Luvita does solar installations.
 
 ## Address and location
 
@@ -169,9 +167,10 @@ easier, not unnecessary.
 
 ## Where things are listed
 
-- luvita.tr lists and links every product and brand the company owns.
-- cosmocrew.dev lists only CosmoCrew apps. Umay, Nesili and Luvi Engine are
-  listed on luvita.tr, not there.
+- luvita.tr lists and links every product that is live or in development,
+  and the CosmoCrew brand.
+- cosmocrew.dev lists only CosmoCrew apps. Umay and Nesili are listed on
+  luvita.tr, not there.
 
 ## Keeping this file current
 
