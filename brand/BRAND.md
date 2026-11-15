@@ -150,7 +150,8 @@ easier, not unnecessary.
 
 - Resilient ambition. Ambition may be said outright.
 - Avoid "small", "indie", "humble", "modest".
-- Don't lean on "studio"; prefer "the crew" or "we".
+- Go easy on "studio" for CosmoCrew; prefer "the crew" or "we". (For Luvita the
+  word is ruled out entirely: see "The company".)
 - Shipped line: "Calm, capable software, crafted to last."
 
 ### Headlines
