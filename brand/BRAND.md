@@ -105,8 +105,8 @@ Rules around the line:
   in a meta or social description. The city survives only in its JSON-LD
   address block.
 - No city in a hero anywhere. The company may move.
-- Registry numbers (MERSİS, trade registry number, VKN) belong on luvita.tr's identity page, not on
-  product sites.
+- Registry numbers (MERSİS, trade registry number, VKN) belong on luvita.tr's
+  identity page, not on product sites.
 
 ## Claims
 
