@@ -166,7 +166,6 @@ easier, not unnecessary.
 - "teslim tarihini aşan"
 - "ekip kiralamıyoruz"
 - "ölümsüz"
-- "kendini geliştiren"
 
 ## Where things are listed
 
